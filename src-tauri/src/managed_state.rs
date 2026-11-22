@@ -477,6 +477,33 @@ pub fn held_skill_identities(
         .collect()
 }
 
+/// The bundle alone, with the skill catalog discovered once for the whole computation instead of
+/// once per `SKILL.md` lookup. Same answers as [`BundleOnly`].
+struct CatalogOnce<'a> {
+    root: &'a Path,
+    skills: std::cell::OnceCell<Option<Vec<crate::skill_discovery::DiscoveredSkill>>>,
+}
+
+impl SourceRoot for CatalogOnce<'_> {
+    fn bundle(&self) -> &Path {
+        self.root
+    }
+    fn catalog(&self) -> Result<Vec<crate::skill_sources::CatalogSkill>, String> {
+        BundleOnly(self.root).catalog()
+    }
+    fn skill_md(&self, name: &str) -> PathBuf {
+        self.skills
+            .get_or_init(|| crate::skill_discovery::discover_skill_catalog(self.root).ok())
+            .as_ref()
+            .and_then(|skills| skills.iter().find(|skill| skill.name == name))
+            .map(|skill| skill.skill_md_path.clone())
+            .unwrap_or_else(|| self.root.join("skills").join(name).join("SKILL.md"))
+    }
+    fn skill_dir(&self, name: &str) -> PathBuf {
+        BundleOnly(self.root).skill_dir(name)
+    }
+}
+
 pub fn compute_bundled_version(
     _workspace_root: &Path,
     home: &Path,
@@ -485,7 +512,10 @@ pub fn compute_bundled_version(
     let mut input = Vec::new();
     // The fingerprint of the bundle must not move with the settings: every root counts. Packs
     // are not part of the bundle, so they do not move it either.
-    let bundle = BundleOnly(bundled_root);
+    let bundle = CatalogOnce {
+        root: bundled_root,
+        skills: std::cell::OnceCell::new(),
+    };
     for artifact in canonical_harness_artifacts(&bundle, &SkillScope::all())? {
         let digest = setup_fingerprint::artifact_source_digest(&artifact, &bundle, home)?;
         input.extend_from_slice(artifact_identity(&artifact).as_bytes());

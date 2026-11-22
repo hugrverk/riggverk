@@ -1003,23 +1003,39 @@ fn opencode_rules_status(
 }
 
 /// Compute OpenCode runtime health against the bundled install sources, with
-/// no CLI probe (`apply_cli_probes` adds those). Of the workspace folder only the record of the
-/// role models the app wrote plays a part.
+/// no CLI probe (`apply_resolved_cli` adds those). Of the workspace folder only the record of the
+/// role models the app wrote plays a part. `opencode_major` is the installed CLI's major version:
+/// OpenCode 2 reads neither `tui.json` nor `config.json`, and anything else (`None` included) is
+/// checked as 1.x.
 /// This is a pure function suitable for unit testing with temp dirs.
-pub fn compute_health(home_dir: &Path, workspace_root: Option<&Path>) -> OpenCodeRuntimeHealth {
+pub fn compute_health(
+    home_dir: &Path,
+    workspace_root: Option<&Path>,
+    opencode_major: Option<u32>,
+) -> OpenCodeRuntimeHealth {
     let bundled = crate::setup_roots::bundled_root().ok();
-    compute_health_with_bundle(bundled.as_deref(), home_dir, workspace_root)
+    compute_health_with_bundle(bundled.as_deref(), home_dir, workspace_root, opencode_major)
 }
 
 fn compute_health_with_bundle(
     bundled_root: Option<&Path>,
     home_dir: &Path,
     workspace_root: Option<&Path>,
+    opencode_major: Option<u32>,
 ) -> OpenCodeRuntimeHealth {
     // The folder the install writes to: `XDG_CONFIG_HOME` moves it, as it moves OpenCode's.
     let config_dir = crate::platform_paths::opencode_config_dir(home_dir);
-    compute_health_in(bundled_root, home_dir, &config_dir, workspace_root)
+    compute_health_in(
+        bundled_root,
+        home_dir,
+        &config_dir,
+        workspace_root,
+        opencode_major,
+    )
 }
+
+/// What the runtime health says about `tui.json` on OpenCode 2, which does not read it.
+const TUI_NOT_READ: &str = "not read by OpenCode 2 (kept for OpenCode 1.x)";
 
 /// The health of the OpenCode files in `config_dir`, the OpenCode config folder of `home_dir`.
 fn compute_health_in(
@@ -1027,7 +1043,10 @@ fn compute_health_in(
     home_dir: &Path,
     config_dir: &Path,
     workspace_root: Option<&Path>,
+    opencode_major: Option<u32>,
 ) -> OpenCodeRuntimeHealth {
+    // OpenCode 2 never reads tui.json: its checks are information, not drift.
+    let tui_is_read = opencode_major != Some(2);
     let source_path = |rel: &str| bundled_root.map(|root| root.join(rel)).unwrap_or_default();
     let template_config_path = source_path("templates/opencode.json");
     let installed_config_path = config_dir.join("opencode.json");
@@ -1353,25 +1372,32 @@ fn compute_health_in(
         has_fail = true;
     }
 
+    let installed_tui_detail = match &installed_tui {
+        Ok(Some(_)) => installed_tui_path_str.clone(),
+        Ok(None) => format!("not found: {}", installed_tui_path_str),
+        Err(refusal) => format!(
+            "unusable ({}): {}",
+            refusal.message(),
+            installed_tui_path_str
+        ),
+    };
     checks.push(OpenCodeRuntimeCheck {
         id: "installed_tui_config_exists".into(),
         label: "Installed TUI config exists".into(),
-        status: if matches!(installed_tui, Ok(Some(_))) {
+        status: if !tui_is_read {
+            "info".into()
+        } else if matches!(installed_tui, Ok(Some(_))) {
             "pass".into()
         } else {
             "fail".into()
         },
-        detail: match &installed_tui {
-            Ok(Some(_)) => installed_tui_path_str.clone(),
-            Ok(None) => format!("not found: {}", installed_tui_path_str),
-            Err(refusal) => format!(
-                "unusable ({}): {}",
-                refusal.message(),
-                installed_tui_path_str
-            ),
+        detail: if tui_is_read {
+            installed_tui_detail
+        } else {
+            format!("{TUI_NOT_READ}: {installed_tui_detail}")
         },
     });
-    if !matches!(installed_tui, Ok(Some(_))) {
+    if tui_is_read && !matches!(installed_tui, Ok(Some(_))) {
         has_fail = true;
     }
 
@@ -1383,37 +1409,46 @@ fn compute_health_in(
     };
     let tui_synced = tui_diverged_keys.as_ref().is_some_and(Vec::is_empty);
 
+    let tui_match_detail: String = if tui_synced {
+        "managed keys match bundled workspace (other keys preserved)".into()
+    } else if let Some(keys) = &tui_diverged_keys {
+        format!(
+            "managed keys differ from bundled workspace ({}). Run diff before sync.",
+            keys.join(", ")
+        )
+    } else if template_tui_exists && installed_tui_exists {
+        "unable to compare managed TUI keys".into()
+    } else if !template_tui_exists {
+        "template TUI config not found".into()
+    } else {
+        "installed TUI config not found".into()
+    };
     checks.push(OpenCodeRuntimeCheck {
         id: "tui_configs_match".into(),
         label: "Managed TUI keys match bundled workspace".into(),
-        status: if tui_synced {
+        status: if !tui_is_read {
+            "info".into()
+        } else if tui_synced {
             "pass".into()
         } else if template_tui_exists && installed_tui_exists {
             "warn".into()
         } else {
             "fail".into()
         },
-        detail: if tui_synced {
-            "managed keys match bundled workspace (other keys preserved)".into()
-        } else if let Some(keys) = &tui_diverged_keys {
-            format!(
-                "managed keys differ from bundled workspace ({}). Run diff before sync.",
-                keys.join(", ")
-            )
-        } else if template_tui_exists && installed_tui_exists {
-            "unable to compare managed TUI keys".into()
-        } else if !template_tui_exists {
-            "template TUI config not found".into()
+        detail: if tui_is_read {
+            tui_match_detail
         } else {
-            "installed TUI config not found".into()
+            format!("{TUI_NOT_READ}: {tui_match_detail}")
         },
     });
-    if !tui_synced {
+    if tui_is_read && !tui_synced {
         has_warn = true;
     }
 
     // Derive tui_status from checks
-    let tui_status = if tui_synced {
+    let tui_status = if !tui_is_read {
+        "not_read".into()
+    } else if tui_synced {
         "synced".into()
     } else if !template_tui_exists && !installed_tui_exists {
         "missing".into()
@@ -1666,22 +1701,38 @@ fn compute_health_in(
         has_warn = true;
     }
 
-    // OpenCode merges `config.json` and `opencode.jsonc` from the same folder with
+    // OpenCode merges `config.json` (1.x only) and `opencode.jsonc` from the same folder with
     // `opencode.json`; one that sets managed keys means OpenCode does not run the team's values.
     let expected = template_json
         .as_ref()
         .and_then(|template| render_expected_opencode_config(template, home_dir));
-    let sibling_files = opencode_precedence::sibling_configs(config_dir, |config| {
-        let mut names = managed_opencode_key_names(config);
-        names.retain(|name| {
-            !matches!(name.as_str(), "model" | "small_model")
-                || expected
-                    .as_ref()
-                    .is_some_and(|value| value.get(name).is_some())
+    let sibling_files =
+        opencode_precedence::sibling_configs(config_dir, opencode_major, |config| {
+            let mut names = managed_opencode_key_names(config);
+            names.retain(|name| {
+                !matches!(name.as_str(), "model" | "small_model")
+                    || expected
+                        .as_ref()
+                        .is_some_and(|value| value.get(name).is_some())
+            });
+            names
         });
-        names
-    });
-    let only_siblings_diverge = !has_fail && !has_warn && !sibling_files.is_empty();
+    // Native OpenCode 2 keys are applied after the 1.x keys the app manages, whichever major runs.
+    let native_v2_files =
+        opencode_precedence::native_v2_configs(config_dir, installed_json.as_ref());
+    let only_overrides_diverge =
+        !has_fail && !has_warn && !(sibling_files.is_empty() && native_v2_files.is_empty());
+    for (file, keys) in &native_v2_files {
+        let warning = opencode_precedence::native_v2_warning(file, keys);
+        checks.push(OpenCodeRuntimeCheck {
+            id: format!("native_v2_keys:{file}"),
+            label: format!("Native OpenCode 2 keys in {file}"),
+            status: "warn".into(),
+            detail: warning.clone(),
+        });
+        warnings.push(warning);
+        has_warn = true;
+    }
     for sibling in &sibling_files {
         let warning = opencode_precedence::sibling_warning(sibling);
         checks.push(OpenCodeRuntimeCheck {
@@ -1713,23 +1764,29 @@ fn compute_health_in(
             "OpenCode generated config snapshot is stale.".to_string(),
             "Regenerate opencode.json before sync.".to_string(),
         )
-    } else if only_siblings_diverge {
-        // An install cannot fix this: the app never writes these files.
-        let steps: Vec<String> = config_precedence
-            .sibling_files
+    } else if only_overrides_diverge {
+        // An install cannot fix this: the app never writes these files or keys.
+        let steps: Vec<String> = native_v2_files
             .iter()
-            .map(|sibling| {
+            .map(|(file, _)| format!("move the native OpenCode 2 keys in {file} to their 1.x keys"))
+            .chain(config_precedence.sibling_files.iter().map(|sibling| {
                 if sibling.invalid {
                     format!("fix {}", sibling.file)
                 } else {
                     format!("remove the managed keys from {}", sibling.file)
                 }
-            })
+            }))
             .collect();
         let next = steps.join(" and ");
-        (
+        let summary = if native_v2_files.is_empty() {
             "Another OpenCode config file beside opencode.json changes the team's values."
-                .to_string(),
+        } else if config_precedence.sibling_files.is_empty() {
+            "Native OpenCode 2 keys in the OpenCode config change the team's values."
+        } else {
+            "Native OpenCode 2 keys and another OpenCode config file change the team's values."
+        };
+        (
+            summary.to_string(),
             format!("{}{}.", next[..1].to_uppercase(), &next[1..]),
         )
     } else {
@@ -1779,7 +1836,9 @@ fn compute_health_in(
         template_tui_path: template_tui_path_str,
         installed_tui_path: installed_tui_path_str,
         tui_status,
-        tui_diverged_keys: tui_diverged_keys.unwrap_or_default(),
+        tui_diverged_keys: tui_diverged_keys
+            .filter(|_| tui_is_read)
+            .unwrap_or_default(),
         generated_snapshot_base_path: generated_snapshot_base_path_str,
         generated_snapshot_policy_path: generated_snapshot_policy_path_str,
         generated_snapshot_path: generated_snapshot_path_str,
@@ -1799,7 +1858,9 @@ pub fn get_opencode_runtime_health() -> Result<OpenCodeRuntimeHealth, String> {
 
     // Compared with the bundle; only the record of the role models the app wrote lives there.
     let workspace_root = super::workspace::setup_workspace_target_path().ok();
-    let mut health = compute_health(&home, workspace_root.as_deref());
+    // The version first: what OpenCode reads depends on its major.
+    let cli = resolve_cli(&opencode_candidates(), ProbeLimits::PRODUCTION);
+    let mut health = compute_health(&home, workspace_root.as_deref(), cli.major());
     // The app's own environment: the one it was launched with, not the user's shell's.
     let user = std::env::var("USER").ok().or_else(|| {
         home.file_name()
@@ -1812,20 +1873,44 @@ pub fn get_opencode_runtime_health() -> Result<OpenCodeRuntimeHealth, String> {
             user.as_deref(),
         )),
     );
-    apply_resolved_cli_probes(&mut health, &opencode_candidates(), ProbeLimits::PRODUCTION);
+    apply_resolved_cli(&mut health, cli, ProbeLimits::PRODUCTION);
     Ok(health)
 }
 
-/// [`apply_cli_probes`] with the first trusted of `candidates`. When every one found is passed
-/// over, the CLI stays missing and its detail says where one was found and why it is not used.
-fn apply_resolved_cli_probes(
-    health: &mut OpenCodeRuntimeHealth,
-    candidates: &[PathBuf],
-    limits: ProbeLimits,
-) {
+/// The `opencode` the health probes, and what its `--version` said.
+struct ResolvedCli {
+    program: Option<PathBuf>,
+    /// The first candidate found, when none of them is trusted.
+    passed_over: Option<PathBuf>,
+    report: opencode_cli::CliReport,
+}
+
+impl ResolvedCli {
+    fn major(&self) -> Option<u32> {
+        self.report.version.as_ref().map(|version| version.major)
+    }
+}
+
+/// The first trusted of `candidates`, and its version.
+fn resolve_cli(candidates: &[PathBuf], limits: ProbeLimits) -> ResolvedCli {
     let program = first_trusted_opencode(candidates);
-    apply_cli_probes(health, program.as_deref(), limits);
-    let (None, Some(found)) = (program, candidates.first()) else {
+    let report = opencode_cli::inspect(program.as_deref().and_then(Path::to_str), limits.version);
+    let passed_over = program
+        .is_none()
+        .then(|| candidates.first().cloned())
+        .flatten();
+    ResolvedCli {
+        program,
+        passed_over,
+        report,
+    }
+}
+
+/// [`apply_cli_report`] for a resolved CLI. When every candidate found is passed over, the CLI
+/// stays missing and its detail says where one was found and why it is not used.
+fn apply_resolved_cli(health: &mut OpenCodeRuntimeHealth, cli: ResolvedCli, limits: ProbeLimits) {
+    apply_cli_report(health, cli.program.as_deref(), cli.report, limits);
+    let Some(found) = cli.passed_over else {
         return;
     };
     let detail = format!(
@@ -1922,27 +2007,52 @@ fn set_check(
     }
 }
 
-/// Add what only the `opencode` CLI can tell to a health computed from files: its version, whether
-/// the default agent resolves, and whether the configured models exist.
-///
-/// Each call is bounded and parse-only (`opencode_cli`), and nothing of the raw output is kept. A
-/// CLI that is missing, times out or fails leaves the dependent checks `unknown`: it never fails
-/// the health or changes its status. A model that is not listed, a default agent that does not
-/// resolve and an unsupported major version are warnings.
+/// [`apply_cli_report`] after its own version probe of `program`. Only the stub-CLI tests call it,
+/// and they run on Unix.
+#[cfg(all(test, unix))]
 pub(crate) fn apply_cli_probes(
     health: &mut OpenCodeRuntimeHealth,
     program: Option<&Path>,
     limits: ProbeLimits,
 ) {
+    let report = opencode_cli::inspect(program.and_then(Path::to_str), limits.version);
+    apply_cli_report(health, program, report, limits);
+}
+
+/// A default-agent probe as the check sees it: whether the agent resolves, or why that is not
+/// known. `command` names what ran.
+fn agent_outcome(probe: AgentProbe, command: &str, timeout: Duration) -> Result<bool, String> {
+    match probe {
+        AgentProbe::Resolves => Ok(true),
+        AgentProbe::Unresolved => Ok(false),
+        AgentProbe::TimedOut => Err(format!("{command} timed out after {}s", timeout.as_secs())),
+        AgentProbe::NotRun => Err(format!("{command} could not run")),
+        AgentProbe::Unreadable => Err(format!("{command} gave no agent list that could be read")),
+    }
+}
+
+/// Add what only the `opencode` CLI can tell to a health computed from files: its version
+/// (`report`, from `program`), whether the default agent resolves, and whether the configured
+/// models exist.
+///
+/// Each call is bounded and parse-only (`opencode_cli`), and nothing of the raw output is kept. A
+/// CLI that is missing, times out or fails leaves the dependent checks `unknown`: it never fails
+/// the health or changes its status. A model that is not listed, a default agent that does not
+/// resolve and an unsupported major version are warnings.
+fn apply_cli_report(
+    health: &mut OpenCodeRuntimeHealth,
+    program: Option<&Path>,
+    report: opencode_cli::CliReport,
+    limits: ProbeLimits,
+) {
     let program = program.and_then(Path::to_str);
-    let report = opencode_cli::inspect(program, limits.version);
     health.warnings.extend(report.warning);
     set_check(
         &mut health.checks,
         "cli",
         "OpenCode CLI",
         match report.health.status.as_str() {
-            "supported" => "pass",
+            "supported" | "compatible" => "pass",
             "unsupported" => "warn",
             _ => "unknown",
         },
@@ -1972,23 +2082,20 @@ pub(crate) fn apply_cli_probes(
     let (agent_outcome, models) = std::thread::scope(|scope| {
         let agent_probe = default_agent.as_deref().map(|agent| {
             scope.spawn(move || {
-                // `debug agent` is checked on 1.x only: that is the version whose output Riggverk has seen.
-                match (program, unreachable, version) {
+                // Only the majors whose output Riggverk has seen are asked.
+                match (program, unreachable, version.map(|version| version.major)) {
                     (_, Some(reason), _) => Err(reason.to_string()),
-                    (Some(program), None, Some(version)) if version.major == 1 => {
-                        match opencode_cli::probe_agent(program, agent, limits.agent) {
-                            AgentProbe::Resolves => Ok(true),
-                            AgentProbe::Unresolved => Ok(false),
-                            AgentProbe::TimedOut => Err(format!(
-                                "opencode debug agent timed out after {}s",
-                                limits.agent.as_secs()
-                            )),
-                            AgentProbe::NotRun => {
-                                Err("opencode debug agent could not run".to_string())
-                            }
-                        }
-                    }
-                    _ => Err("only checked on OpenCode 1.x".to_string()),
+                    (Some(program), None, Some(1)) => agent_outcome(
+                        opencode_cli::probe_agent(program, agent, limits.agent),
+                        "opencode debug agent",
+                        limits.agent,
+                    ),
+                    (Some(program), None, Some(2)) => agent_outcome(
+                        opencode_cli::probe_agent_v2(program, agent, limits.agent),
+                        "opencode debug agents",
+                        limits.agent,
+                    ),
+                    _ => Err("only checked on OpenCode 1.x and 2.x".to_string()),
                 }
             })
         });
@@ -2021,11 +2128,19 @@ pub(crate) fn apply_cli_probes(
                     .with_file_name("agents")
                     .to_string_lossy()
                     .into_owned();
-                health.warnings.push(format!(
-                    "OpenCode cannot resolve default agent {agent}: opencode debug agent failed. \
-                     Check the agent files in {agents_dir} for a frontmatter error, \
-                     or run Install/Update."
-                ));
+                health.warnings.push(if version.is_some_and(|version| version.major == 2) {
+                    format!(
+                        "OpenCode 2 does not list default agent {agent} in opencode debug agents; \
+                         it leaves out an agent file it cannot read. Check the agent files in \
+                         {agents_dir} for a frontmatter error, or run Install/Update."
+                    )
+                } else {
+                    format!(
+                        "OpenCode cannot resolve default agent {agent}: opencode debug agent failed. \
+                         Check the agent files in {agents_dir} for a frontmatter error, \
+                         or run Install/Update."
+                    )
+                });
                 ("fail", format!("{agent} does not resolve"))
             }
             Err(reason) => ("unknown", format!("{agent} (not verified: {reason})")),
@@ -2734,11 +2849,17 @@ mod tests {
     /// Existing fixtures supply the install bundle explicitly, independently of the runtime root,
     /// and check the default folder below `home`, whatever `XDG_CONFIG_HOME` the test process has.
     fn compute_health(bundle: &Path, home: &Path) -> OpenCodeRuntimeHealth {
+        compute_health_for(bundle, home, None)
+    }
+
+    /// [`compute_health`] for the installed OpenCode major `major`.
+    fn compute_health_for(bundle: &Path, home: &Path, major: Option<u32>) -> OpenCodeRuntimeHealth {
         super::compute_health_in(
             Some(bundle),
             home,
             &home.join(".config/opencode"),
             Some(&record_root(home)),
+            major,
         )
     }
 
@@ -2846,7 +2967,7 @@ mod tests {
                 &fs::read_to_string(bundle.join("agents").join(name)).unwrap(),
             );
         }
-        assert_eq!(super::compute_health(&home, None).status, "synced");
+        assert_eq!(super::compute_health(&home, None, None).status, "synced");
 
         write_file(
             &ws,
@@ -2867,7 +2988,7 @@ mod tests {
         write_file(&ws, "templates/sync/opencode-rules.md", "workspace rules");
         write_file(&ws, "agents/architect.md", "workspace agent");
 
-        let health = super::compute_health(&home, None);
+        let health = super::compute_health(&home, None, None);
         assert_eq!(health.status, "synced", "{:?}", health.checks);
         assert_eq!(health.config_status, "synced");
         assert_eq!(health.tui_status, "synced");
@@ -2893,15 +3014,21 @@ mod tests {
             ".config/opencode/opencode.json",
             r#"{"model":"workspace/main","provider":{"mine":{}}}"#,
         );
-        assert_eq!(super::compute_health(&home, None).config_status, "diverged");
+        assert_eq!(
+            super::compute_health(&home, None, None).config_status,
+            "diverged"
+        );
         install_for(&bundle, &home);
-        assert_eq!(super::compute_health(&home, None).config_status, "synced");
+        assert_eq!(
+            super::compute_health(&home, None, None).config_status,
+            "synced"
+        );
         let installed: serde_json::Value =
             serde_json::from_slice(&fs::read(home.join(".config/opencode/opencode.json")).unwrap())
                 .unwrap();
         assert_eq!(installed["provider"], serde_json::json!({"mine":{}}));
 
-        let unavailable = super::compute_health_with_bundle(None, &home, None);
+        let unavailable = super::compute_health_with_bundle(None, &home, None, None);
         assert_ne!(unavailable.config_status, "synced");
         assert_eq!(unavailable.bundled_agent_count, 0);
         cleanup(&ws);
@@ -2951,7 +3078,7 @@ mod tests {
         write_file(&home, ".config/opencode/opencode.json", r#"{"lsp":false}"#);
         write_file(&home, ".config/opencode/config.json", r#"{"lsp":false}"#);
 
-        let health = super::compute_health(&home, None);
+        let health = super::compute_health(&home, None, None);
         assert_eq!(health.status, "synced", "{:?}", health.checks);
         assert_eq!(
             (
@@ -2977,12 +3104,12 @@ mod tests {
 
         // A sibling beside the installed file is found in the same folder.
         write_file(&xdg, "opencode/opencode.jsonc", r#"{"model":"mine/other"}"#);
-        assert!(super::compute_health(&home, None)
+        assert!(super::compute_health(&home, None, None)
             .config_precedence
             .sibling_files
             .is_empty());
         write_file(&xdg, "opencode/opencode.jsonc", r#"{"lsp":false}"#);
-        let siblings = super::compute_health(&home, None)
+        let siblings = super::compute_health(&home, None, None)
             .config_precedence
             .sibling_files;
         assert_eq!(
@@ -2992,7 +3119,7 @@ mod tests {
 
         // Without the variable the default folder is read again.
         unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
-        let health = super::compute_health(&home, None);
+        let health = super::compute_health(&home, None, None);
         assert_eq!(
             PathBuf::from(&health.installed_config_path),
             home.join(".config/opencode/opencode.json")
@@ -5875,7 +6002,11 @@ mod tests {
         fs::set_permissions(&open, fs::Permissions::from_mode(0o777)).unwrap();
         let (before, _) = probe_synced("untrusted-health-ws", None, LIMITS);
         let mut health = before.clone();
-        apply_resolved_cli_probes(&mut health, std::slice::from_ref(&stub), LIMITS);
+        apply_resolved_cli(
+            &mut health,
+            resolve_cli(std::slice::from_ref(&stub), LIMITS),
+            LIMITS,
+        );
         cleanup(&open);
         let cli = health.cli.as_ref().expect("cli health");
         assert_eq!(cli.status, "missing");
@@ -5905,8 +6036,9 @@ mod tests {
 
     // ── CLI probes against a stub `opencode` ──
 
-    /// A stub that answers `--version`, `debug agent <name> --pure` (exit status only) and
-    /// `models`, and records the arguments of the `models` call in `models-args.txt`.
+    /// A stub that answers `--version`, `debug agent <name> --pure` (exit status only),
+    /// `debug agents` (a list with `architect` and `build`) and `models`, and records the
+    /// arguments of the `models` call in `models-args.txt`.
     #[cfg(unix)]
     fn health_stub(dir: &Path, version: &str, agent_exit: i32, models: &[&str]) -> PathBuf {
         let listed: String = models.iter().map(|m| format!("'{m}' ")).collect();
@@ -5915,7 +6047,7 @@ mod tests {
             &format!(
                 r#"case "$1" in
   --version) echo {version}; exit 0 ;;
-  debug) exit {agent_exit} ;;
+  debug) [ "$2" = agents ] && echo '[{{"id":"architect","permissions":[]}},{{"id":"build"}}]'; exit {agent_exit} ;;
   models) echo "$@" > "$(dirname "$0")/models-args.txt"; printf '%s\n' {listed}; exit 0 ;;
 esac
 exit 64"#
@@ -6127,26 +6259,198 @@ exit 64"#
         assert!(hung.warnings.is_empty(), "{:?}", hung.warnings);
     }
 
+    /// [`probe_synced`] for an OpenCode 2 health: the files are checked as 2.x reads them.
+    #[cfg(unix)]
+    fn probe_synced_v2(
+        name: &str,
+        program: &Path,
+    ) -> (OpenCodeRuntimeHealth, OpenCodeRuntimeHealth) {
+        let (ws, home) = setup_synced_bundle_copy(name);
+        let before = compute_health_for(&ws, &home, Some(2));
+        let mut after = before.clone();
+        apply_cli_probes(&mut after, Some(program), LIMITS);
+        cleanup(&ws);
+        cleanup(&home);
+        (before, after)
+    }
+
     #[cfg(unix)]
     #[test]
-    fn test_a_2x_cli_warns_lists_standalone_and_skips_the_agent_probe() {
+    fn test_a_2x_cli_is_compatible_lists_standalone_and_finds_the_agent_in_debug_agents() {
         let dir = temp_root("probe-v2");
-        let stub = health_stub(&dir, "2.0.32", 1, &GOOD_MODELS);
-        let (before, after) = probe_synced("probe-v2", Some(&stub), LIMITS);
+        let stub = health_stub(&dir, "opencode v2.3.2", 0, &GOOD_MODELS);
+        let (before, after) = probe_synced_v2("probe-v2", &stub);
         let args = fs::read_to_string(dir.join("models-args.txt")).expect("models called");
         cleanup(&dir);
 
         let cli = after.cli.as_ref().expect("cli probed");
-        assert_eq!((cli.status.as_str(), cli.major), ("unsupported", Some(2)));
-        assert_eq!(after.warnings.len(), 1, "{:?}", after.warnings);
-        for needle in ["2.0.32", "supports OpenCode 1.x", "tui.json", "in memory"] {
-            assert!(after.warnings[0].contains(needle), "{}", after.warnings[0]);
-        }
+        assert_eq!(
+            (cli.status.as_str(), cli.version.as_deref(), cli.major),
+            ("compatible", Some("2.3.2"), Some(2))
+        );
+        assert!(after.warnings.is_empty(), "{:?}", after.warnings);
         assert_eq!(args.trim(), "models --standalone");
-        // The agent probe is only trusted on 1.x; a failing exit there must not raise an alarm.
-        assert_eq!(check_of(&after, "default_agent_resolves").status, "unknown");
-        assert_eq!(check_of(&after, "model").status, "pass");
+        for id in ["cli", "default_agent_resolves", "model"] {
+            assert_eq!(check_of(&after, id).status, "pass", "{id}");
+        }
         assert_eq!(after.status, before.status);
+        assert_eq!(after.status, "synced");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_a_2x_default_agent_missing_from_debug_agents_warns() {
+        let dir = temp_root("probe-v2-unlisted");
+        let stub = write_stub_opencode(
+            &dir,
+            r#"case "$1" in --version) echo 'opencode v2.4.0' ;; debug) echo '[{"id":"build"}]' ;; *) exit 0 ;; esac"#,
+        );
+        let (before, after) = probe_synced_v2("probe-v2-unlisted", &stub);
+        cleanup(&dir);
+
+        assert!(after
+            .cli
+            .as_ref()
+            .is_some_and(|cli| cli.detail.contains("tested with 2.3.2")));
+        let agent = check_of(&after, "default_agent_resolves");
+        assert_eq!(agent.status, "fail");
+        assert_eq!(after.warnings.len(), 1, "{:?}", after.warnings);
+        assert!(
+            after.warnings[0].starts_with("OpenCode 2 does not list default agent architect"),
+            "{}",
+            after.warnings[0]
+        );
+        assert_eq!(after.status, before.status);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_a_2x_agent_listing_that_fails_stays_unknown() {
+        let dir = temp_root("probe-v2-fails");
+        let stub = health_stub(&dir, "opencode v2.3.2", 1, &GOOD_MODELS);
+        let (_, after) = probe_synced_v2("probe-v2-fails", &stub);
+        cleanup(&dir);
+
+        let agent = check_of(&after, "default_agent_resolves");
+        assert_eq!(agent.status, "unknown");
+        assert!(
+            agent
+                .detail
+                .contains("opencode debug agents gave no agent list"),
+            "{}",
+            agent.detail
+        );
+        assert!(after.warnings.is_empty(), "{:?}", after.warnings);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_a_3x_cli_is_unsupported_and_skips_the_agent_probe() {
+        let dir = temp_root("probe-v3");
+        let stub = health_stub(&dir, "3.0.0", 0, &GOOD_MODELS);
+        let (before, after) = probe_synced("probe-v3", Some(&stub), LIMITS);
+        cleanup(&dir);
+
+        let cli = after.cli.as_ref().expect("cli probed");
+        assert_eq!((cli.status.as_str(), cli.major), ("unsupported", Some(3)));
+        assert_eq!(check_of(&after, "cli").status, "warn");
+        assert_eq!(after.warnings.len(), 1, "{:?}", after.warnings);
+        assert!(after.warnings[0].contains("supports OpenCode 1.x"));
+        assert_eq!(check_of(&after, "default_agent_resolves").status, "unknown");
+        assert_eq!(after.status, before.status);
+    }
+
+    #[test]
+    fn test_on_opencode_2_tui_json_is_information_not_drift() {
+        let (ws, home) = setup_synced_bundle_copy("tui-v2");
+        write_file(&home, ".config/opencode/tui.json", r#"{"theme": "other"}"#);
+        let v1 = compute_health(&ws, &home);
+        assert_eq!(
+            (v1.status.as_str(), v1.tui_status.as_str()),
+            ("diverged", "diverged")
+        );
+        let v2 = compute_health_for(&ws, &home, Some(2));
+        assert_eq!(v2.tui_status, "not_read");
+        assert!(v2.tui_diverged_keys.is_empty());
+        assert_eq!(v2.status, "synced", "{:?}", v2.checks);
+        let tui = v2
+            .checks
+            .iter()
+            .find(|check| check.id == "tui_configs_match")
+            .expect("tui check");
+        assert_eq!(tui.status, "info");
+        assert!(
+            tui.detail.starts_with("not read by OpenCode 2"),
+            "{}",
+            tui.detail
+        );
+
+        fs::remove_file(home.join(".config/opencode/tui.json")).unwrap();
+        assert_eq!(compute_health(&ws, &home).status, "missing");
+        let v2 = compute_health_for(&ws, &home, Some(2));
+        assert_eq!(
+            (v2.status.as_str(), v2.tui_status.as_str()),
+            ("synced", "not_read")
+        );
+        cleanup(&ws);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn test_on_opencode_2_config_json_is_not_a_sibling() {
+        let (ws, home) = setup_synced_bundle_copy("config-json-v2");
+        write_file(
+            &home,
+            ".config/opencode/config.json",
+            r#"{"permission": {"bash": "allow"}}"#,
+        );
+        let v1 = compute_health(&ws, &home);
+        assert_eq!(v1.status, "diverged");
+        assert_eq!(v1.config_precedence.sibling_files.len(), 1);
+        let v2 = compute_health_for(&ws, &home, Some(2));
+        assert_eq!(v2.status, "synced", "{:?}", v2.warnings);
+        assert!(v2.config_precedence.sibling_files.is_empty());
+        assert!(v2.warnings.is_empty(), "{:?}", v2.warnings);
+        cleanup(&ws);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn test_native_v2_keys_in_opencode_json_warn_on_every_major() {
+        let (ws, home) = setup_synced_bundle_copy("native-v2");
+        let mut config = installed(&home);
+        config["permissions"] = serde_json::json!([
+            {"action": "shell", "resource": "*", "effect": "allow"}
+        ]);
+        config["mcp"]["servers"] = serde_json::json!({"mine": {"command": [SECRET]}});
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            &serde_json::to_string_pretty(&config).unwrap(),
+        );
+        for major in [None, Some(1), Some(2)] {
+            let health = compute_health_for(&ws, &home, major);
+            assert_eq!(
+                health.config_status, "synced",
+                "managed keys are as bundled"
+            );
+            assert_eq!(health.status, "diverged", "{major:?}");
+            assert_eq!(health.warnings.len(), 1, "{:?}", health.warnings);
+            assert!(
+                health.warnings[0].starts_with(
+                    "opencode.json sets native OpenCode 2 keys (permissions, mcp.servers)"
+                ),
+                "{}",
+                health.warnings[0]
+            );
+            assert_eq!(
+                health.next_action,
+                "Move the native OpenCode 2 keys in opencode.json to their 1.x keys."
+            );
+            assert!(!health_text(&health).contains(SECRET));
+        }
+        cleanup(&ws);
+        cleanup(&home);
     }
 
     #[cfg(unix)]

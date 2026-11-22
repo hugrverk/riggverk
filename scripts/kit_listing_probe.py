@@ -8,7 +8,9 @@ characters; this shows what a harness does with them.
 
 How far each answer goes: Codex shows the prompt itself. Claude Code shows token estimates, so its
 "full" means the row is about the size of the description. OpenCode and Kilo show what they
-discovered, not what reaches the prompt.
+discovered, not what reaches the prompt. OpenCode 1.x answers `debug skill`; OpenCode 2.x has no
+such command, so the probe starts `opencode serve` on a free local port with a random password and
+reads its skill list (`GET /api/skill`, operation `skill.list`), then stops the server.
 
 Harnesses can still contact their vendors (model catalogs, telemetry) with a placeholder key.
 
@@ -22,13 +24,19 @@ Exit codes: 0 pass, 1 a default setup does not list the kit in full, 2 the probe
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
+import secrets
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -55,6 +63,7 @@ FULL, SHORTENED, NAME_ONLY = "full", "shortened", "name-only"
 # Harnesses walk up from their working folder and would load any of these above it.
 PROJECT_MARKERS = (".git", ".claude", ".agents", ".codex", ".opencode", ".kilo", "CLAUDE.md", "AGENTS.md")
 CODEX_SKILL_LINE = re.compile(r"^- ([a-z0-9][a-z0-9-]*):\s*(.*?)\s*\(file: [^)]*\)$", re.MULTILINE)
+VERSION = re.compile(r"(\d+)\.\d+\.\d+")
 CLAUDE_WINDOW = re.compile(r"\*\*Tokens:\*\*\s*[\d.]+[km]?\s*/\s*([\d.]+[km]?)")
 TOKEN_COUNT = re.compile(r"([\d.]+)([km]?)")
 
@@ -248,6 +257,7 @@ class Sandbox:
             "ANTHROPIC_API_KEY": PLACEHOLDER_KEY,
             "ANTHROPIC_BASE_URL": DEAD_BASE_URL,
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+            # OpenCode 1.x and 2.x both skip the update check with it (2.x: cli/src/services/updater.ts).
             "OPENCODE_DISABLE_AUTOUPDATE": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_CONFIG_NOSYSTEM": "1",
@@ -352,13 +362,103 @@ def probe_codex(binary: str, base: Path, skills_dir: Path, kit: dict[str, Skill]
     report.failures += [f"codex: {problem}" for problem in not_listed_in_full(kit, listing.statuses, honors_user_only=False)]
 
 
+def opencode_version(binary: str, box: Sandbox) -> tuple[int, str]:
+    text = box.run([binary, "--version"]).strip()
+    match = VERSION.search(text)
+    if not match:
+        raise ProbeError(f"opencode: unreadable --version output {text[:40]!r}")
+    return int(match.group(1)), match.group(0)
+
+
+def _free_port() -> int:
+    with socket.socket() as probe_socket:
+        probe_socket.bind(("127.0.0.1", 0))
+        return probe_socket.getsockname()[1]
+
+
+def opencode2_skills(binary: str, box: Sandbox) -> str:
+    """The skills OpenCode 2 loads, as `debug skill` entries (name, description, location).
+
+    OpenCode 2 has no `debug skill`. Its server lists skills (`GET /api/skill`), but a cold
+    Location lists nothing until its plugins load, and `opencode api --standalone` reads once and
+    exits, so this runs `opencode serve`, waits for the plugins and for two skill reads that agree.
+    """
+    port = _free_port()
+    password = secrets.token_urlsafe(24)
+    query = urllib.parse.urlencode({"location[directory]": str(box.cwd)})
+    auth = "Basic " + base64.b64encode(f"opencode:{password}".encode()).decode()
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    def get(path: str) -> list[dict]:
+        request = urllib.request.Request(f"http://127.0.0.1:{port}{path}?{query}", headers={"Authorization": auth})
+        with opener.open(request, timeout=5) as response:
+            data = json.load(response).get("data")
+        if not isinstance(data, list):
+            raise ProbeError(f"opencode: {path} returned no list")
+        return data
+
+    server = subprocess.Popen(
+        [binary, "serve", "--hostname", "127.0.0.1", "--port", str(port)],
+        cwd=box.cwd,
+        env={**box.env(), "OPENCODE_PASSWORD": password},
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + TIMEOUT_SECONDS
+        previous = None
+        while True:
+            if server.poll() is not None:
+                raise ProbeError(f"opencode: serve exited {server.returncode}")
+            if time.monotonic() > deadline:
+                raise ProbeError(f"opencode: the server listed no stable skills within {TIMEOUT_SECONDS} s")
+            try:
+                if get("/api/plugin"):
+                    skills = get("/api/skill")
+                    if skills == previous:
+                        break
+                    previous = skills
+            except (OSError, ValueError):  # not listening yet; a refused or reset connection is an OSError
+                pass
+            time.sleep(0.2)
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait()
+    entries = [
+        {"name": skill.get("name", ""), "description": skill.get("description", ""), "location": skill.get("path", "")}
+        for skill in skills
+        if isinstance(skill, dict)
+    ]
+    return json.dumps(entries)
+
+
 def probe_discovery(harness: str, binary: str, base: Path, skills_dir: Path, kit: dict[str, Skill], report: Report) -> None:
     kit_box = Sandbox(base, f"{harness}-kit", True, skills_dir, {})
     empty_box = Sandbox(base, f"{harness}-empty", False, skills_dir, {})
-    require_empty(parse_skill_discovery(empty_box.run([binary, "debug", "skill"]), harness, kit), harness)
-    listing = parse_skill_discovery(kit_box.run([binary, "debug", "skill"]), harness, kit)
+    setup = "discovered"
+
+    def discover(box: Sandbox) -> str:
+        return box.run([binary, "debug", "skill"])
+
+    if harness == "opencode":
+        major, version = opencode_version(binary, empty_box)
+        if major == 2:
+            setup = f"discovered by OpenCode {version} (server skill list)"
+
+            def discover(box: Sandbox) -> str:
+                return opencode2_skills(binary, box)
+
+        elif major != 1:
+            raise ProbeError(f"opencode: version {version} is neither 1.x nor 2.x; this probe knows how to list skills on those only")
+    require_empty(parse_skill_discovery(discover(empty_box), harness, kit), harness)
+    listing = parse_skill_discovery(discover(kit_box), harness, kit)
     require_kit_visible(listing, harness)
-    report.record("discovered", listing)
+    report.record(setup, listing)
     report.failures += [f"{harness}: {problem}" for problem in not_listed_in_full(kit, listing.statuses, honors_user_only=False)]
 
 

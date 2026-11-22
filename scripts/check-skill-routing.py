@@ -86,7 +86,7 @@ REQUIRED_SUPPORT_FILES = {
     "adversarial-test": ("adversarial-roles.md", "critic-recipes.md"),
 }
 # Codex ignores `disable-model-invocation`; its own per-skill policy file keeps these skills explicit-only.
-CODEX_POLICY_SKILLS = ("retro", "grill-me")
+CODEX_POLICY_SKILLS = ("retro", "grill-me", "raise-the-bar")
 CODEX_POLICY_FILE = "agents/openai.yaml"
 CODEX_POLICY_TEXT = "policy:\n  allow_implicit_invocation: false\n"
 URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)

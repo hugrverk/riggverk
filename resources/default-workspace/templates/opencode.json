@@ -184,6 +184,7 @@
     "webfetch": "ask",
     "websearch": "ask",
     "task": "allow",
+    "execute": "ask",
     "skill": {
       "*": "allow"
     },
@@ -1882,6 +1883,11 @@
       "opencode.jsonc": "ask",
       ".opencode/**": "ask",
       ".github/workflows/**": "ask",
+      "**/AGENTS.md": "ask",
+      "**/opencode.json": "ask",
+      "**/opencode.jsonc": "ask",
+      "**/.opencode/**": "ask",
+      "**/.github/workflows/**": "ask",
       "**/.claude/skills/**": "ask",
       "**/.agents/skills/**": "ask",
       "**/.config/opencode/skills/**": "ask",
@@ -2000,7 +2006,11 @@
         "edit": {
           "*": "deny",
           ".opencode/plans/*.md": "allow",
-          "*opencode/plans/*.md": "allow"
+          "*opencode/plans/*.md": "allow",
+          "~/.opencode/plan/*": "allow"
+        },
+        "external_directory": {
+          "~/.opencode/plan/*": "allow"
         }
       }
     },
@@ -2133,6 +2143,7 @@
         "webfetch": "ask",
         "websearch": "ask",
         "task": "deny",
+        "execute": "deny",
         "skill": {
           "*": "allow"
         },

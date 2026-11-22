@@ -6,8 +6,8 @@
 //! must stay cheap and credential-free. The posture is its own opt-in read of a few named keys.
 //!
 //! What it reads: the global config files named in [`compute`] (Claude `settings.json`, Codex
-//! `config.toml` in `CODEX_HOME`, OpenCode `opencode.json`/`opencode.jsonc`/`config.json`, Cursor
-//! `sandbox.json`, the Kilo config). Each file is read once, capped at 1 MiB, parsed in memory,
+//! `config.toml` in `CODEX_HOME`, OpenCode `opencode.json`/`opencode.jsonc`/`config.json` (the
+//! last read by OpenCode 1.x only), Cursor `sandbox.json`, the Kilo config). Each file is read once, capped at 1 MiB, parsed in memory,
 //! reduced to a few booleans, enums and counts, and dropped. Those files can hold provider keys, so
 //! nothing of their text is ever formatted, logged, stored or returned: parse errors are mapped to
 //! `()` without formatting (TOML errors quote the source), the wire types below hold only fixed
@@ -528,14 +528,21 @@ fn kilo_facts(text: &str) -> Option<PermissionFacts> {
     })
 }
 
-const OPENCODE_FILES: [&str; 3] = ["opencode.json", "opencode.jsonc", "config.json"];
+/// The global OpenCode config files and how they are named in the result. OpenCode 2 no longer
+/// reads `config.json`; the label says so, since the posture does not ask which version runs.
+const OPENCODE_FILES: [(&str, &str); 3] = [
+    ("opencode.json", "opencode.json"),
+    ("opencode.jsonc", "opencode.jsonc"),
+    ("config.json", OPENCODE_V1_ONLY_FILE),
+];
+const OPENCODE_V1_ONLY_FILE: &str = "config.json (OpenCode 1.x only)";
 
 fn opencode(inputs: &Inputs, out: &mut Out) {
     let mut allow_all = None;
     let mut bash_allow = None;
     let mut deny_rules = None;
-    for name in OPENCODE_FILES {
-        let (state, facts) = load(&inputs.opencode_dir.join(name), opencode_facts);
+    for (file, name) in OPENCODE_FILES {
+        let (state, facts) = load(&inputs.opencode_dir.join(file), opencode_facts);
         out.source(name, state);
         let Some(facts) = facts else { continue };
         if facts.allow_all && allow_all.is_none() {
@@ -544,7 +551,7 @@ fn opencode(inputs: &Inputs, out: &mut Out) {
         if facts.bash_allow && bash_allow.is_none() {
             bash_allow = Some(name);
         }
-        if name == "opencode.json" {
+        if file == "opencode.json" {
             deny_rules = Some(facts.deny_rules);
         }
     }
@@ -1026,7 +1033,7 @@ mod tests {
             .expect("bash allow");
         assert_eq!(bash.file, Some("opencode.json"));
         assert!(has(&p, FindingCode::OpencodeDenyRulesMissing));
-        assert_eq!(state(&p, "config.json"), SourceState::Missing);
+        assert_eq!(state(&p, OPENCODE_V1_ONLY_FILE), SourceState::Missing);
 
         f.write(
             ".config/opencode/opencode.json",
@@ -1037,6 +1044,21 @@ mod tests {
             &f.posture(HarnessId::OpenCode),
             FindingCode::OpencodeAllowAll
         ));
+
+        // OpenCode 2 ignores config.json: a finding there says it is read by 1.x only.
+        f.write(".config/opencode/opencode.json", "{}");
+        f.write(
+            ".config/opencode/config.json",
+            r#"{"permission":{"bash":"allow"}}"#,
+        );
+        let p = f.posture(HarnessId::OpenCode);
+        assert_eq!(state(&p, OPENCODE_V1_ONLY_FILE), SourceState::Read);
+        let bash = p
+            .findings
+            .iter()
+            .find(|finding| finding.code == FindingCode::OpencodeBashAllow)
+            .expect("bash allow");
+        assert_eq!(bash.file, Some("config.json (OpenCode 1.x only)"));
     }
 
     #[test]

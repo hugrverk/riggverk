@@ -4,7 +4,6 @@
   "mode": "subagent",
   "temperature": 0.2,
   "steps": 35,
-  "hidden": true,
   "composition": {
     "replace_sections": ["bash", "edit"],
     "bash_profile": "bash_readonly",

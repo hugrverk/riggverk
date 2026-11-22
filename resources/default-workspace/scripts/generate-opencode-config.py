@@ -48,7 +48,7 @@ set_workspace_root(os.path.join(SCRIPT_DIR, ".."))
 PERMISSION_KEY_ORDER = [
     "*", "external_directory", "doom_loop", "todowrite",
     "read", "glob", "grep", "list", "lsp",
-    "question", "webfetch", "websearch", "task",
+    "question", "webfetch", "websearch", "task", "execute",
     "skill", "bash", "edit",
 ]
 
