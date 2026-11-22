@@ -766,6 +766,7 @@ pub fn detect_surface_state_with(
                         .disabled()
                         .err()
                         .or_else(|| sources.comment_policy().err())
+                        .or_else(|| sources.answer_style().err())
                         .map(str::to_string);
                 }
                 (planned.iter().map(|p| p.kind).collect(), reason, manual)

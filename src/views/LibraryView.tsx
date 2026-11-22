@@ -6,6 +6,8 @@ import type {
   AgentMetadataResponse,
   AgentSourceContent,
   AgentTargetMeta,
+  AnswerStyleChoice,
+  AnswerStyleLevel,
   CommentPolicyChoice,
   CommentPolicyLevel,
   ConfigEditorSourceMeta,
@@ -133,6 +135,10 @@ export interface LibraryViewProps {
   commentPolicy?: CommentPolicyChoice | null;
   /** Chooses the comment policy for every harness; resolves true once saved. Without it no level offers Use. */
   onSetCommentPolicy?: (level: CommentPolicyLevel) => Promise<boolean>;
+  /** How agents word their answers; null while it could not be read (Rules then shows no "Answer style"). */
+  answerStyle?: AnswerStyleChoice | null;
+  /** Chooses the answer style for every harness; resolves true once saved. Without it no level offers Use. */
+  onSetAnswerStyle?: (level: AnswerStyleLevel) => Promise<boolean>;
   /**
    * Skill import: preview copies the dropped or given paths into private staging; commit publishes the previewed
    * copy into pack:imported and lists the packs again. Without them there is no "Import skill…".
@@ -235,6 +241,8 @@ export function LibraryView(props: LibraryViewProps) {
     canImportSkill: props.onPreviewImport !== undefined && props.onCommitImport !== undefined,
     commentPolicy: props.commentPolicy ?? null,
     canSetCommentPolicy: props.onSetCommentPolicy !== undefined,
+    answerStyle: props.answerStyle ?? null,
+    canSetAnswerStyle: props.onSetAnswerStyle !== undefined,
   };
 
   const topics = LIBRARY_TOPICS.filter(topic => topic.id !== "configs" || showConfigs);
@@ -502,6 +510,11 @@ export function LibraryView(props: LibraryViewProps) {
       case "comment-policy":
         void props.onSetCommentPolicy?.(action.level).then(saved => {
           if (saved) notify(`Code comments: ${row.name} · the next Update changes your rules`, { tone: "ok" });
+        });
+        break;
+      case "answer-style":
+        void props.onSetAnswerStyle?.(action.level).then(saved => {
+          if (saved) notify(`Answer style: ${row.name} · the next Update changes your rules`, { tone: "ok" });
         });
         break;
       case "open":

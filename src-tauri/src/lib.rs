@@ -1,6 +1,7 @@
 mod agent_discovery;
 mod agent_skill_targets;
 mod agent_targets;
+mod answer_style;
 mod app_data_migration;
 mod app_menu;
 mod app_update;
@@ -58,6 +59,8 @@ mod window_placement;
 mod workspace_layout;
 
 #[cfg(test)]
+mod answer_style_contract;
+#[cfg(test)]
 mod app_data_migration_contract;
 #[cfg(test)]
 mod claude_settings_contract;
@@ -113,20 +116,20 @@ mod workspace_cleanup_contract;
 use app_update::{check_app_update, get_app_update_info, install_app_update};
 use commands::{
     apply_codex_config_defaults, apply_rules_conversion, apply_setup, apply_take_bundled,
-    apply_uninstall, create_doc, get_agent_targets, get_backup_details, get_claude_runtime_health,
-    get_codex_runtime_health, get_comment_policy, get_cursor_profile_health,
-    get_effective_skill_loads, get_installation_status, get_light_runtime_health,
-    get_opencode_runtime_health, get_security_posture, get_settings, get_workspace_diagnostics,
-    list_agent_metadata, list_available_opencode_models, list_backups, list_docs,
-    list_opencode_config_editor_sources, list_rules_files, list_setup_history, list_skill_choices,
-    list_skills, open_backups_folder, open_default_workspace_folder, open_doc, open_rules_file,
-    preview_codex_config_defaults, preview_file_diff, preview_rules_conversion, preview_rules_diff,
-    preview_setup, preview_take_bundled, preview_uninstall, read_agent_source, read_agent_template,
-    read_config_template, read_doc, read_opencode_config_source, read_opencode_model_selection,
-    read_rules_file, read_skill, reset_active_workspace_path, reset_opencode_model_selection,
-    rollback_setup_transaction, save_doc, save_rules_refinements, set_codex_config_kept,
-    set_comment_policy, set_files_kept, set_rules_user_managed, set_skills_enabled,
-    update_opencode_model_selection, update_settings,
+    apply_uninstall, create_doc, get_agent_targets, get_answer_style, get_backup_details,
+    get_claude_runtime_health, get_codex_runtime_health, get_comment_policy,
+    get_cursor_profile_health, get_effective_skill_loads, get_installation_status,
+    get_light_runtime_health, get_opencode_runtime_health, get_security_posture, get_settings,
+    get_workspace_diagnostics, list_agent_metadata, list_available_opencode_models, list_backups,
+    list_docs, list_opencode_config_editor_sources, list_rules_files, list_setup_history,
+    list_skill_choices, list_skills, open_backups_folder, open_default_workspace_folder, open_doc,
+    open_rules_file, preview_codex_config_defaults, preview_file_diff, preview_rules_conversion,
+    preview_rules_diff, preview_setup, preview_take_bundled, preview_uninstall, read_agent_source,
+    read_agent_template, read_config_template, read_doc, read_opencode_config_source,
+    read_opencode_model_selection, read_rules_file, read_skill, reset_active_workspace_path,
+    reset_opencode_model_selection, rollback_setup_transaction, save_doc, save_rules_refinements,
+    set_answer_style, set_codex_config_kept, set_comment_policy, set_files_kept,
+    set_rules_user_managed, set_skills_enabled, update_opencode_model_selection, update_settings,
 };
 use commands::{
     commit_skill_import, copy_skill_to_pack, forget_pack, list_pack_skills, preview_skill_import,
@@ -185,6 +188,8 @@ pub fn run() {
             set_skills_enabled,
             get_comment_policy,
             set_comment_policy,
+            get_answer_style,
+            set_answer_style,
             get_installation_status,
             get_effective_skill_loads,
             read_skill,

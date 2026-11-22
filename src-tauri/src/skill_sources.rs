@@ -25,6 +25,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::answer_style::AnswerStyle;
 use crate::comment_policy::CommentPolicy;
 use crate::pack_routing::PackRouting;
 use crate::skill_discovery::DiscoveredSkill;
@@ -94,6 +95,12 @@ pub trait SourceRoot {
     /// renders rules then fails closed. Harness default without a data folder.
     fn comment_policy(&self) -> Result<CommentPolicy, &str> {
         Ok(CommentPolicy::HarnessDefault)
+    }
+    /// How agents word their answers (see [`crate::answer_style`]): the section the rules block
+    /// gets. An error is the fixed phrase of an `answer-style.json` that cannot be used; whatever
+    /// renders rules then fails closed. Harness default without a data folder.
+    fn answer_style(&self) -> Result<AnswerStyle, &str> {
+        Ok(AnswerStyle::HarnessDefault)
     }
 }
 
@@ -243,6 +250,8 @@ pub struct SkillSources {
     disabled: Result<BTreeSet<String>, String>,
     /// `comment-policy.json` (see [`crate::comment_policy`]).
     comment_policy: Result<CommentPolicy, String>,
+    /// `answer-style.json` (see [`crate::answer_style`]).
+    answer_style: Result<AnswerStyle, String>,
 }
 
 impl SourceRoot for SkillSources {
@@ -273,6 +282,9 @@ impl SourceRoot for SkillSources {
             .as_ref()
             .copied()
             .map_err(String::as_str)
+    }
+    fn answer_style(&self) -> Result<AnswerStyle, &str> {
+        self.answer_style.as_ref().copied().map_err(String::as_str)
     }
 }
 
@@ -320,6 +332,7 @@ impl SkillSources {
             routing_section: String::new(),
             disabled: Ok(BTreeSet::new()),
             comment_policy: Ok(CommentPolicy::HarnessDefault),
+            answer_style: Ok(AnswerStyle::HarnessDefault),
         }
     }
 
@@ -370,6 +383,7 @@ impl SkillSources {
         let disabled = crate::disabled_skills::load(workspace_root);
         let routing_section = render_routing(&packs, &catalog, &disabled);
         let comment_policy = crate::comment_policy::load(workspace_root);
+        let answer_style = crate::answer_style::load(workspace_root);
         Self {
             bundled,
             workspace_root: workspace_root.to_path_buf(),
@@ -382,6 +396,7 @@ impl SkillSources {
             routing_section,
             disabled,
             comment_policy,
+            answer_style,
         }
     }
 

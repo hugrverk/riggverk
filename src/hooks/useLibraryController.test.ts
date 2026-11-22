@@ -1546,3 +1546,48 @@ describe("useLibraryController comment policy", () => {
     expect(result.current.commentPolicy).toEqual({ level: "minimal", problem: null });
   });
 });
+
+describe("useLibraryController answer style", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("keeps the newer level when an earlier read answers after the refresh that follows a Set", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    let level: "harness_default" | "plain" = "harness_default";
+    let releaseOld: () => void = () => {};
+    let reads = 0;
+    invoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      switch (cmd) {
+        case "get_answer_style": {
+          reads += 1;
+          const answer = { level, problem: null };
+          // The first read is slow: it answers only after the Set and its own read are done.
+          return reads === 1 ? new Promise(resolve => { releaseOld = () => resolve(answer); }) : Promise.resolve(answer);
+        }
+        case "set_answer_style":
+          level = args!.level as typeof level;
+          return Promise.resolve(null);
+        case "read_agent_template":
+          return Promise.resolve(bundledDoc);
+        default:
+          return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+      }
+    });
+
+    let older: Promise<void> = Promise.resolve();
+    act(() => {
+      older = result.current.loadAnswerStyle();
+    });
+    await act(async () => {
+      expect(await result.current.setAnswerStyle("plain")).toBe(true);
+    });
+    expect(result.current.answerStyle?.level).toBe("plain");
+    await act(async () => {
+      releaseOld();
+      await older;
+    });
+    expect(result.current.answerStyle).toEqual({ level: "plain", problem: null });
+  });
+});

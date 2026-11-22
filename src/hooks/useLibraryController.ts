@@ -25,6 +25,8 @@ import type {
   SkillChoices,
   CommentPolicyChoice,
   CommentPolicyLevel,
+  AnswerStyleChoice,
+  AnswerStyleLevel,
   SkillSummary,
 } from "../types";
 
@@ -63,6 +65,10 @@ export function useLibraryController({
   const [commentPolicy, setCommentPolicyState] = useState<CommentPolicyChoice | null>(null);
   /** The latest comment policy read: an earlier one that answers later never overwrites it. */
   const commentPolicyLoadSeqRef = useRef(0);
+  /** How agents word their answers; null while it could not be read. */
+  const [answerStyle, setAnswerStyleState] = useState<AnswerStyleChoice | null>(null);
+  /** The latest answer style read: an earlier one that answers later never overwrites it. */
+  const answerStyleLoadSeqRef = useRef(0);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
   const activeSkillIdRef = useRef<string | null>(null);
@@ -474,6 +480,19 @@ export function useLibraryController({
     setCommentPolicyState(choice);
   }, [isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
 
+  /** Reads the answer style. A failure leaves it unread: Rules then shows no choice, and nothing is reported. */
+  const loadAnswerStyle = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
+    const loadSeq = ++answerStyleLoadSeqRef.current;
+    let choice: AnswerStyleChoice | null = null;
+    try {
+      choice = await invoke<AnswerStyleChoice>("get_answer_style");
+    } catch {
+      choice = null;
+    }
+    if (!isWorkspaceLoadCurrent(generation) || answerStyleLoadSeqRef.current !== loadSeq) return;
+    setAnswerStyleState(choice);
+  }, [isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
+
   const loadWorkspaceLibraryResources = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     await Promise.all([
       loadSkills(generation).catch(() => {}),
@@ -482,9 +501,10 @@ export function useLibraryController({
       loadAgentTemplate(generation),
       loadRulesFiles(generation),
       loadCommentPolicy(generation),
+      loadAnswerStyle(generation),
     ]);
     setLibraryReloadEpoch(epoch => epoch + 1);
-  }, [loadAgentSources, loadAgentTemplate, loadCommentPolicy, loadDocs, loadRulesFiles, loadSkills, workspaceLoadGenerationRef]);
+  }, [loadAgentSources, loadAgentTemplate, loadAnswerStyle, loadCommentPolicy, loadDocs, loadRulesFiles, loadSkills, workspaceLoadGenerationRef]);
 
   const loadLibraryView = useCallback(() => {
     void loadDocs();
@@ -493,7 +513,8 @@ export function useLibraryController({
     void loadAgentTemplate();
     void loadRulesFiles();
     void loadCommentPolicy();
-  }, [loadAgentSources, loadAgentTemplate, loadCommentPolicy, loadDocs, loadRulesFiles, loadSkills]);
+    void loadAnswerStyle();
+  }, [loadAgentSources, loadAgentTemplate, loadAnswerStyle, loadCommentPolicy, loadDocs, loadRulesFiles, loadSkills]);
 
   const resetLibraryState = useCallback(() => {
     docSaveOpRef.current.invalidate();
@@ -517,6 +538,8 @@ export function useLibraryController({
     setAgentTemplate(null);
     commentPolicyLoadSeqRef.current += 1;
     setCommentPolicyState(null);
+    answerStyleLoadSeqRef.current += 1;
+    setAnswerStyleState(null);
 
     // A config source load still running belongs to the old workspace.
     configSourceLoadSeqRef.current += 1;
@@ -905,6 +928,25 @@ export function useLibraryController({
     return true;
   }, [loadAgentTemplate, loadCommentPolicy, onPacksChanged, setError]);
 
+  /**
+   * Chooses how agents word their answers, for every harness, then reads the style and the base template (which carries
+   * the section) again. The next Update changes the rules files, with a diff and undo. Resolves true once saved.
+   */
+  const setAnswerStyle = useCallback(async (level: AnswerStyleLevel): Promise<boolean> => {
+    try {
+      await invoke("set_answer_style", { level });
+    } catch (e) {
+      setError(`Answer style: ${e}`);
+      // The refusal may be a file that became unusable: read it again, so the Library says why and offers no level.
+      await loadAnswerStyle();
+      return false;
+    }
+    // What the next Update writes changed: the overview plans it again.
+    onPacksChanged?.();
+    await Promise.all([loadAnswerStyle(), loadAgentTemplate()]);
+    return true;
+  }, [loadAgentTemplate, loadAnswerStyle, onPacksChanged, setError]);
+
   const readSkill = useCallback(async (id: string) => {
     if (id !== activeSkillIdRef.current && !(await confirmLeave())) return;
     activeSkillIdRef.current = id;
@@ -1115,6 +1157,9 @@ export function useLibraryController({
     commentPolicy,
     setCommentPolicy,
     loadCommentPolicy,
+    answerStyle,
+    setAnswerStyle,
+    loadAnswerStyle,
     activeSkillId,
     activeSkillContent,
     readSkill,

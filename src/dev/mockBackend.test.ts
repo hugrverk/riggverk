@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { ActionResult } from "../components/TerminalOutput";
 import type {
   AgentTargetMeta,
+  AnswerStyleChoice,
   CodexConfigDefaultsPreview,
   CommentPolicyChoice,
   DocSummary,
@@ -261,6 +262,28 @@ describe("mock backend: comment policy", () => {
 
     await invoke("set_comment_policy", { level: "harness_default" });
     expect((await invoke<DocumentContent>("read_agent_template")).content).not.toContain("## Code comments");
+  });
+});
+
+describe("mock backend: answer style", () => {
+  it("starts at harness default, keeps a chosen level across reads and composes it after Communication", async () => {
+    expect(await invoke<AnswerStyleChoice>("get_answer_style")).toEqual({ level: "harness_default", problem: null });
+    const bundled = (await invoke<DocumentContent>("read_agent_template")).content;
+    expect(bundled).not.toContain("## Answer style");
+
+    await invoke("set_answer_style", { level: "plain" });
+    expect(await invoke<AnswerStyleChoice>("get_answer_style")).toEqual({ level: "plain", problem: null });
+    const template = (await invoke<DocumentContent>("read_agent_template")).content;
+    expect(template).toContain("\n\n## Answer style\n");
+    expect(template.match(/## Answer style/g)).toHaveLength(1);
+    // Right after the Communication section, before the section that follows it.
+    expect(template.indexOf("## Answer style")).toBeGreaterThan(template.indexOf("## Communication"));
+    expect(template.indexOf("## Answer style")).toBeLessThan(template.indexOf("## Verification"));
+    await expect(invoke("set_answer_style", { level: "loud" })).rejects.toThrow(/unknown answer style/);
+    expect((await invoke<AnswerStyleChoice>("get_answer_style")).level).toBe("plain");
+
+    await invoke("set_answer_style", { level: "harness_default" });
+    expect((await invoke<DocumentContent>("read_agent_template")).content).toBe(bundled);
   });
 });
 

@@ -151,6 +151,7 @@ mod tests {
             crate::comment_policy::COMMENT_POLICY_FILE,
             "comment-policy.json"
         );
+        assert_eq!(crate::answer_style::ANSWER_STYLE_FILE, "answer-style.json");
         assert_eq!(
             crate::config_preferences::CONFIG_PREFERENCES_FILE,
             "config-preferences.json"
