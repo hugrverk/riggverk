@@ -1,6 +1,6 @@
 ---
 name: browser-qa
-description: Verify local frontend changes in a browser with targeted route, interaction, console, and responsive checks.
+description: Use proactively after a frontend change to verify it in a browser with targeted route, interaction, console, and responsive checks. Name the local URL or routes and what changed.
 model: inherit
 readonly: false
 ---

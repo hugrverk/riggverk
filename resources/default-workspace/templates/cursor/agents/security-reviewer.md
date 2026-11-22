@@ -1,6 +1,6 @@
 ---
 name: security-reviewer
-description: Review security-sensitive diffs involving auth, secrets, filesystem paths, shell execution, MCP, uploads, payments, or external services.
+description: Use proactively when a change touches auth, secrets, filesystem paths, shell execution, MCP, uploads, payments, or external services, to review the security-sensitive diff. Include the diff or changed-file list in the prompt.
 model: inherit
 readonly: true
 ---

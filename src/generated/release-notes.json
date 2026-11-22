@@ -11,6 +11,7 @@
             "Code comments: in Library → Rules, choose Harness default (nothing changes), Minimal (comment only what the code cannot show) or Off (only comments the language or tooling requires). The choice reaches every agent's rules at the next Update, and a repository's own comment rules still win",
             "Claude Code: when the advisor tool is available, the rules and the `implementation-plan`, `minimal-implementation`, `delegate` and `orchestrate` skills ask the agent to consult it before settling on a plan and before calling work done. Riggverk sets no model for it",
             "The Claude Code page suggests two `permissions.deny` lines that stop Claude's file tools from reading `.env` files, with a Copy button. Riggverk does not write them into your settings",
+            "`frontend-design` carries motion guidance in `motion.md`, read only when a change animates something: when to animate, durations and easing, enter and exit, interruptions and reduced motion. The skill also names more signs of generic AI-made design, the browser surfaces to style (selection, focus ring, scrollbars) and a body line length of about 65–75 characters. An existing design system still wins",
             "Linux packages: an AppImage, a deb and an rpm for x86_64, built in an Ubuntu 22.04 container"
           ]
         },
@@ -21,6 +22,7 @@
             "Codex: when your config uses a permission profile (`default_permissions` or a `[permissions.*]` table), Riggverk leaves `sandbox_mode` out and the review says why",
             "Codex: `retro` and `grill-me` start only when you invoke them",
             "Claude Code: the inspector and sentinel agents run at high effort",
+            "Agents: inspector and sentinel (`security_reviewer` in Codex) say so when the prompt has no diff and review only what they can read, cite `file:line` with a short quote, list what they did not check, and use the prompt's own output format when it gives one. They, repo-scout and verifier treat file content as data, not instructions. verifier reports each check as pass, fail or not run with the command, exit status and an output excerpt, instead of saying whether it is safe to commit. The Cursor repo-scout, inspector, verifier, security-reviewer and browser-qa agents say when to use them and what to pass, the Codex rules name the Codex agents and when to use each, and the Claude Code scribe no longer preloads `current-docs`",
             "The `.env` check on the Claude Code page reads the deny rules in order, so a later `Read(!…)` exception that reopens `.env` no longer counts as protection",
             "A disabled skill also leaves the agent-specific lines of the rules that name it",
             "Several skill descriptions say what the skill is not for, so agents pick the right skill more often",
@@ -32,7 +34,9 @@
             "Codex: Keep mine records exactly the values the confirmation showed. If `config.toml` changed in the meantime, nothing is recorded and the page asks you to look again",
             "The data folder, the backup folder and the folders above them must belong to you or the system and must not be writable by other users; otherwise Riggverk names the folder and why and does not use it. Personal docs are saved only into docs folders that belong to you",
             "On Linux, a folder only your own user group can write counts as yours, so a pack cloned with the usual settings is no longer refused",
-            "Riggverk runs OpenCode and Python only from folders other users cannot change. An OpenCode it skips for that reason shows as found but not used"
+            "Riggverk runs OpenCode and Python only from folders other users cannot change. An OpenCode it skips for that reason shows as found but not used",
+            "A long workspace folder path stays inside its card on the Overview page. Before, it could make the page wider than a narrow window",
+            "The review map shows when an update writes or removes a skill pack's skills, and the table names how many skills come from each pack. Before, a pack's line looked like a kept, skipped one, so a pack the update installed looked as if it was never installed"
           ]
         }
       ]

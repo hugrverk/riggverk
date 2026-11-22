@@ -83,3 +83,7 @@ Done when: every changed trust boundary is listed as checked or not checked, and
 ### Claude Code
 
 - If using a subagent, keep it read-only unless the user explicitly asked for fixes.
+
+### Codex
+
+- The `sentinel` agent is called `security_reviewer` here. It is read-only by its instructions only, under your sandbox; give it the diff or changed-file list.

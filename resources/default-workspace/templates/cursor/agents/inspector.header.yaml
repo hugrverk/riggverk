@@ -1,4 +1,4 @@
 name: inspector
-description: Strict read-only code review for correctness, security, test gaps, overengineering, and pattern consistency.
+description: Use proactively after non-trivial implementation and before commit for a strict read-only review of correctness, security, test gaps, overengineering, and pattern consistency. Include the diff or changed-file list in the prompt.
 model: inherit
 readonly: true

@@ -943,6 +943,18 @@ export interface PlannedOperation {
   details?: string[];
   conflict_description?: string | null;
   manual_step?: string | null;
+  /** Skills surface only: the pack skills among `details`, per line and pack. */
+  pack_writes?: PackWrite[];
+}
+
+/** The skills of one pack that one detail line of the skills surface creates, updates or removes, or keeps because they were edited (a `!` line). */
+export interface PackWrite {
+  /** Index into `details` of the line that counts these skills. */
+  line: number;
+  pack: string;
+  skills: number;
+  /** The enabled harnesses that read the line's folder: a shared folder reaches several. */
+  harnesses: InstallAgent[];
 }
 
 export interface SetupPlan {

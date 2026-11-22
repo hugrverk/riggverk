@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::artifact_registry::{ArtifactId, ArtifactKind};
 use crate::commands::file_eq;
 use crate::file_conflicts::is_kept;
-use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
+use crate::setup_lifecycle::{OperationKind, PackWrite, SetupSurfaceId};
 use crate::skill_roots::SkillScope;
 use crate::skill_sources::{SkillSources, SourceRoot};
 
@@ -2758,6 +2758,19 @@ pub fn flagged_pack_skills<R: SourceRoot + ?Sized>(
         .collect()
 }
 
+/// The pack of every pack skill in the catalog, by name. A pack skill a bundled one shadows is
+/// not in the catalog, so it is not listed.
+pub fn pack_of_skills<R: SourceRoot + ?Sized>(
+    sources: &R,
+) -> std::collections::BTreeMap<String, String> {
+    sources
+        .catalog()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|entry| Some((entry.skill.name, entry.pack?)))
+        .collect()
+}
+
 /// The longest value of a privileged key a review line carries; the Library shows it whole.
 const REVIEW_KEY_VALUE_CHARS: usize = 200;
 
@@ -2802,15 +2815,49 @@ pub(crate) fn flagged_note(flagged: &FlaggedSkill) -> String {
 /// the harnesses that read both that copy and the installed one. `=` marks a skill with a file
 /// the user keeps. A skill in `disabled` that is removed gets a line of its own too, and one whose
 /// edited copy stays says so instead of a conflict or kept line.
+///
+/// Beside the lines it returns which of the created, updated, removed and edited (kept) skills are
+/// in a pack (`packs`, by skill name), per line and pack: the review names a pack's share of a
+/// folder and draws the pack's curve to each harness that reads the folder from these, not from
+/// the prose.
 pub fn skill_plan_details(
     planned: &[PlannedArtifact],
     scope: &SkillScope,
     flagged: &std::collections::BTreeMap<String, FlaggedSkill>,
     disabled: &std::collections::BTreeSet<String>,
-) -> Vec<String> {
+    packs: &std::collections::BTreeMap<String, String>,
+) -> (Vec<String>, Vec<PackWrite>) {
     use std::collections::{BTreeMap, BTreeSet};
     let count = |n: usize, noun: &str| format!("{n} {noun}{}", if n == 1 { "" } else { "s" });
     let mut lines = Vec::new();
+    let mut pack_writes = Vec::new();
+    // Every enabled harness that reads `root`, also when the root is no longer installed into:
+    // removing a copy there still changes what that harness loads.
+    let record = |pack_writes: &mut Vec<PackWrite>,
+                  line: usize,
+                  root: crate::skill_roots::SkillRoot,
+                  skills: &mut dyn Iterator<Item = &str>| {
+        let mut by_pack: BTreeMap<&str, usize> = BTreeMap::new();
+        for pack in skills.filter_map(|skill| packs.get(skill)) {
+            *by_pack.entry(pack.as_str()).or_default() += 1;
+        }
+        let harnesses: Vec<_> = scope
+            .harnesses()
+            .iter()
+            .copied()
+            .filter(|harness| {
+                crate::skill_roots::readers(*harness)
+                    .iter()
+                    .any(|folder| folder.root() == Some(root))
+            })
+            .collect();
+        pack_writes.extend(by_pack.into_iter().map(|(pack, skills)| PackWrite {
+            line,
+            pack: pack.to_string(),
+            skills,
+            harnesses: harnesses.clone(),
+        }));
+    };
     for (sign, kind, owned) in [
         ("+", OperationKind::Create, false),
         ("~", OperationKind::Update, false),
@@ -2836,6 +2883,12 @@ pub fn skill_plan_details(
                 if owned {
                     tail.push_str(", owned copies");
                 }
+                record(
+                    &mut pack_writes,
+                    lines.len(),
+                    root,
+                    &mut skills.iter().copied(),
+                );
                 lines.push(format!(
                     "{sign} {} ({}, {tail})",
                     root.display(),
@@ -2852,6 +2905,12 @@ pub fn skill_plan_details(
                 } else {
                     flagged_note(&flagged[skill])
                 };
+                record(
+                    &mut pack_writes,
+                    lines.len(),
+                    root,
+                    &mut std::iter::once(skill),
+                );
                 lines.push(format!(
                     "{sign} {}/{skill} ({}; {note})",
                     root.display(),
@@ -2935,6 +2994,12 @@ pub fn skill_plan_details(
             many => format!("; {} read both copies", many.join(", ")),
         };
         if held.conflict {
+            record(
+                &mut pack_writes,
+                lines.len(),
+                root,
+                &mut std::iter::once(skill.as_str()),
+            );
             lines.push(format!(
                 "! {}/{skill} (edited, kept{reads})",
                 root.display()
@@ -2952,7 +3017,7 @@ pub fn skill_plan_details(
             ));
         }
     }
-    lines
+    (lines, pack_writes)
 }
 
 pub(crate) fn harness_name(harness: crate::agent_targets::HarnessId) -> &'static str {
@@ -4767,7 +4832,25 @@ mod tests {
                 ],
             },
         )]);
-        let lines = skill_plan_details(&planned, &SkillScope::all(), &flagged, &Default::default());
+        let packs = std::collections::BTreeMap::from([("deploy".to_string(), "team".to_string())]);
+        let (lines, writes) = skill_plan_details(
+            &planned,
+            &SkillScope::all(),
+            &flagged,
+            &Default::default(),
+            &packs,
+        );
+        // The flagged pack skill is counted on its own line, not in the folder's.
+        assert_eq!(
+            writes
+                .iter()
+                .map(|write| (write.line, write.pack.as_str(), write.skills))
+                .collect::<Vec<_>>(),
+            [(1, "team", 1)]
+        );
+        assert!(writes[0]
+            .harnesses
+            .contains(&crate::agent_targets::HarnessId::Claude));
         assert_eq!(
             lines,
             [
@@ -4784,9 +4867,18 @@ mod tests {
                 &planned,
                 &SkillScope::all(),
                 &Default::default(),
-                &Default::default()
+                &Default::default(),
+                &packs,
             ),
-            ["+ ~/.claude/skills (2 skills, 3 files)"]
+            (
+                vec!["+ ~/.claude/skills (2 skills, 3 files)".to_string()],
+                vec![PackWrite {
+                    line: 0,
+                    pack: "team".to_string(),
+                    skills: 1,
+                    harnesses: writes[0].harnesses.clone(),
+                }]
+            )
         );
     }
 

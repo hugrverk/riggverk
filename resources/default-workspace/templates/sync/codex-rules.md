@@ -74,6 +74,7 @@ A skill's `## Output` lists content to cover, not a replacement format: keep the
 ## Codex harness
 
 - Custom agents use bundled Codex TOML templates under `~/.codex/agents/`; skills install to `~/.agents/skills`, which Codex reads (`$CODEX_HOME/skills` with a customised `CODEX_HOME`).
+- Bundled agents: `repo_scout` maps an unclear area before implementation; `inspector` reviews a finished diff before commit; `security_reviewer` reviews a diff that touches auth, secrets, uploads, shell execution, or sensitive data; `verifier` runs non-destructive checks after implementation. Name the paths or pass the diff they need.
 - `~/.codex/config.toml` is manual-review only; never assume Riggverk owns the full file.
 - Respect Codex sandbox, approval, and config boundaries; do not bypass documented safety settings.
 - For image generation, design mocks, screenshots, browser automation, CDP, or computer-use work, use the available Codex tools when they directly support the task and keep generated assets in scope.

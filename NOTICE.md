@@ -164,6 +164,38 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## emilkowalski/skills emil-design-eng
+
+`motion.md` in `frontend-design` draws on the `emil-design-eng` skill of [emilkowalski/skills](https://github.com/emilkowalski/skills) (`skills/emil-design-eng/SKILL.md`, read at commit `64eb3deb9a5fbfa041faf783e0bc3fd635872e9c`). Used: deciding in order whether to animate, why, with which easing and for how long; leaving frequent and keyboard-driven actions unanimated; ease-out for enter and exit and no ease-in on UI; short durations per kind of element with an exit faster than the enter; never animating from `scale(0)`; popovers that grow from their trigger while dialogs stay centered; a slight scale on press; instant neighboring tooltips; transitions rather than keyframes where motion can be interrupted; velocity-based dismissal; animating only `transform` and `opacity`; gating hover motion on a fine pointer; and keeping opacity changes under reduced motion. Changes: the text is Riggverk's own and shorter, without code examples, library-specific advice, the persona, the fixed opening reply or the required review table; the values are defaults that a product's own motion tokens override. No files of that work are included.
+
+License of the original work:
+
+MIT License
+
+Copyright (c) 2026 Emil Kowalski
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## pbakaus/impeccable
+
+`frontend-design` also draws on [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (`plugin/skills/impeccable/SKILL.md`, `skill/reference/craft-floor.md` and `skill/reference/typeset.md`, read at commit `b49177d32788f2dc585c42831d845dacf1ebed2c`), licensed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0). Used: concrete signs of generic AI-made design (gradient text, same-size icon cards as the page structure, the big-number hero, decorative glass, a stripe down one side of a rounded box, glyphs or emoji as icons), styling the browser surfaces a page does not draw (selection, focus ring, scrollbars, tabular numerals), and a body measure of about 65–75 characters. Changes: the ideas were reworded for Riggverk as signs to avoid unless the product already uses them, under the existing rule that a mature design system is preserved; the launcher, hooks, detector, modes and commands of that work are not used. No files of that work are included.
+
 ## Acknowledgements
 
 These skills share an idea with public work but no text, structure or distinctive method taken from it:

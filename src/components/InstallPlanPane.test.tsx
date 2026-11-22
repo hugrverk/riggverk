@@ -10,6 +10,7 @@ import {
   type InstallFlowStatus,
 } from "../hooks/useInstallFlow";
 import { renderInFrame } from "../test/renderWithShell";
+import type { FlowModel } from "../lib/flowModel";
 import type { PlannedOperation, SetupPlan, SetupResult, SetupSurfaceId } from "../types";
 import { InstallPlanPane } from "./InstallPlanPane";
 
@@ -546,6 +547,45 @@ describe("InstallPlanPane: band, map and states", () => {
     expect(map().querySelector('.plan-ln[data-agent="claude"]')!.getAttribute("data-curve")).toBe("live");
     const said = Array.from(map().querySelectorAll(".plan-chip, .plan-agent")).map(node => node.textContent).join(" ");
     expect(said).not.toMatch(/written|✓|\bfiles?\b/);
+  });
+
+  it("draws a pack's curve as written only where its skills were, never in the dotted kept look, and names it in the row", () => {
+    const packOps = [
+      op("skills", "update", {
+        details: ["+ ~/.gemini/config/skills (35 skills, 70 files)"],
+        pack_writes: [{ line: 0, pack: "kretsverket", skills: 5, harnesses: ["antigravity"] }],
+      }),
+    ];
+    const request: InstallFlowRequest = { label: "update all", surfaces: ["skills"] };
+    const edge = (source: string, agent: "claude" | "antigravity") =>
+      ({ id: `${source}>${agent}`, source, agent, items: [], total: 5, status: "ok" as const, glow: false });
+    const flowBase: FlowModel = {
+      sources: [
+        { id: "base", kind: "base", label: "Riggverk base", state: "ok", items: [], total: 30, notes: [] },
+        { id: "pack:kretsverket", kind: "pack", label: "kretsverket", state: "ok", items: [], total: 5, notes: [] },
+      ],
+      agents: (["claude", "antigravity"] as const).map(id => ({ id, label: id, status: "active" as const, state: null, decision: false, sub: "", pillText: "", card: null })),
+      offGroup: null,
+      edges: [edge("pack:kretsverket", "claude"), edge("pack:kretsverket", "antigravity")],
+    };
+    const curveOf = (agent: string) => map().querySelector(`.plan-ln[data-source="pack:kretsverket"][data-agent="${agent}"]`)!;
+    const legend = () => Array.from(map().querySelectorAll(".plan-legend li")).map(item => item.textContent);
+
+    renderPane(makeFlow({ operations: packOps, request }), { flowBase });
+    expect(within(grid()).getByText("35 skills, 70 files · 5 from kretsverket")).toBeTruthy();
+    expect(curveOf("antigravity").getAttribute("data-curve")).toBe("write");
+    expect(curveOf("claude").getAttribute("class")).toContain("is-sync");
+    expect(map().querySelector(".is-quiet")).toBeNull();
+    expect(legend()).toEqual(["will be written", "kept, skipped", "already in sync"]);
+    cleanup();
+
+    const review = buildInstallReview(request, planOf(packOps));
+    const result: SetupResult = { success: true, transaction_id: "tx-9", applied: ["x"], failed: [], rolled_back: [], manual_steps: [], message: "ok" };
+    const idle = { ...makeFlow(), status: "idle" as const, request: null, review: null };
+    renderPane(idle, { flowBase, done: { review, result, at: Date.now(), actionResult: ACTION_RESULT }, onDismiss: vi.fn() });
+    expect(curveOf("antigravity").getAttribute("class")).toContain("is-written");
+    expect(curveOf("claude").getAttribute("data-curve")).toBe("sync");
+    expect(map().textContent).toContain("5 items · written");
   });
 
   it("stays as the receipt of a successful apply, with Undo, until it is dismissed", () => {

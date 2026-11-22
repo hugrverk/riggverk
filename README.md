@@ -234,6 +234,8 @@ Several bundled skills adapt methods from open skill collections. The wording is
 | [t3dotgg/tstack](https://github.com/t3dotgg/tstack) | `pr-workflow`, `review-response`, `pr-modernize` | MIT |
 | [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) | `security-audit` (vendored) | MIT |
 | [anthropics/skills](https://github.com/anthropics/skills) | the framing behind `frontend-design` | Apache-2.0 |
+| [emilkowalski/skills](https://github.com/emilkowalski/skills) | the motion guidance in `frontend-design` | MIT |
+| [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | the design checks in `frontend-design` | Apache-2.0 |
 | [Lobe Icons](https://github.com/lobehub/lobe-icons) | the agent icons; the marks belong to their owners, and Riggverk is not affiliated with or endorsed by them | MIT |
 
 See [NOTICE.md](./NOTICE.md) for third-party license information.

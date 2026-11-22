@@ -1,4 +1,4 @@
 name: repo-scout
-description: Map unfamiliar repository areas, ownership, existing patterns, and verification commands before implementation.
+description: Use proactively before implementation when repository structure, ownership, or conventions are unclear, to map relevant files, existing patterns, and verification commands. Name the area or paths to scout.
 model: inherit
 readonly: true

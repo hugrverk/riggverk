@@ -694,3 +694,41 @@ describe("mock backend: an install run", () => {
     expect(status.surfaces.map(surface => surface.state)).toEqual(["update_available", "update_available"]);
   });
 });
+
+describe("mock backend: pack skills in the skills review", () => {
+  beforeAll(async () => {
+    vi.resetModules();
+    window.history.replaceState(null, "", "/?mock=update");
+    await import("./mockBackend");
+  });
+
+  it("names the active pack skills of each folder line with the enabled harnesses that read it, like the backend", async () => {
+    const plan = await invoke<SetupPlan>("preview_setup", { surfaces: ["skills"] });
+    const op = plan.operations.find(entry => entry.surface === "skills")!;
+    const named = (op.pack_writes ?? []).map(write => [op.details![write.line]!.split(" (")[0], write.pack, write.skills, write.harnesses]);
+    // Default harnesses: Codex, OpenCode and Cursor read ~/.agents/skills; Claude, OpenCode and Cursor ~/.claude/skills.
+    expect(named).toEqual([
+      ["+ ~/.agents/skills", "imported", 1, ["codex", "opencode", "cursor"]],
+      ["+ ~/.agents/skills", "mine", 1, ["codex", "opencode", "cursor"]],
+      ["~ ~/.claude/skills", "imported", 1, ["opencode", "claude", "cursor"]],
+      ["~ ~/.claude/skills", "mine", 1, ["opencode", "claude", "cursor"]],
+    ]);
+  });
+
+  it("removes a disabled pack skill on a line of its own per folder, naming its pack", async () => {
+    await invoke("set_skills_enabled", { names: ["my-checklist"], enabled: false });
+    try {
+      const plan = await invoke<SetupPlan>("preview_setup", { surfaces: ["skills"] });
+      const op = plan.operations.find(entry => entry.surface === "skills")!;
+      const named = (op.pack_writes ?? []).map(write => [op.details![write.line]!.split(" (")[0], write.pack, write.harnesses]);
+      expect(named).toEqual([
+        ["+ ~/.agents/skills", "imported", ["codex", "opencode", "cursor"]],
+        ["~ ~/.claude/skills", "imported", ["opencode", "claude", "cursor"]],
+        ["- ~/.agents/skills/my-checklist", "mine", ["codex", "opencode", "cursor"]],
+        ["- ~/.claude/skills/my-checklist", "mine", ["opencode", "claude", "cursor"]],
+      ]);
+    } finally {
+      await invoke("set_skills_enabled", { names: ["my-checklist"], enabled: true });
+    }
+  });
+});
