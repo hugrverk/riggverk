@@ -2007,8 +2007,9 @@ fn set_check(
     }
 }
 
-/// [`apply_cli_report`] after its own version probe of `program`.
-#[cfg(test)]
+/// [`apply_cli_report`] after its own version probe of `program`. Only the stub-CLI tests call it,
+/// and they run on Unix.
+#[cfg(all(test, unix))]
 pub(crate) fn apply_cli_probes(
     health: &mut OpenCodeRuntimeHealth,
     program: Option<&Path>,
