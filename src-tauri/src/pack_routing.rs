@@ -27,13 +27,16 @@
 //!
 //! The user's comment policy (see [`crate::comment_policy`]) is composed in the same place: its
 //! `## Code comments` section goes right after the base's `## Scope` section. At harness default
-//! there is no section and the text is unchanged, byte for byte.
+//! there is no section and the text is unchanged, byte for byte. The user's answer style (see
+//! [`crate::answer_style`]) is composed the same way: its `## Answer style` section goes right after
+//! the base's `## Communication` section, and at harness default nothing is added.
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::Read;
 use std::path::Path;
 
+use crate::answer_style::AnswerStyle;
 use crate::artifact_registry::ArtifactId;
 use crate::comment_policy::CommentPolicy;
 use crate::skill_sources::SourceRoot;
@@ -46,6 +49,8 @@ pub const SECTION_HEADING: &str = "## Pack skill routing";
 const ANCHOR_HEADING: &str = "## Skill routing";
 /// The base section the comment policy's section follows.
 const COMMENTS_ANCHOR_HEADING: &str = "## Scope";
+/// The base section the answer style's section follows.
+const ANSWERS_ANCHOR_HEADING: &str = "## Communication";
 /// Largest `routing.md` read.
 pub const MAX_ROUTING_BYTES: u64 = 12 * 1024;
 /// Most lines a `routing.md` may have, blank ones included.
@@ -386,17 +391,20 @@ fn without_disabled_routing(base: &str, disabled: &BTreeSet<String>) -> String {
 }
 
 /// The rules text of a bundled base: its routing to `disabled` skills left out, the packs' routing
-/// `section` spliced in (see [`splice`]), then the section of the `comments` policy after the
-/// `## Scope` section (or at the end without one). The one place a rules text is composed: every
+/// `section` spliced in (see [`splice`]), then the section of the `answers` style after the
+/// `## Communication` section and the section of the `comments` policy after the `## Scope`
+/// section (each at the end without its anchor). The one place a rules text is composed: every
 /// rules source and the Library's rules views go through it.
 pub fn compose(
     base: &str,
     disabled: &BTreeSet<String>,
     section: &str,
     comments: CommentPolicy,
+    answers: AnswerStyle,
 ) -> String {
     let routed = splice(&without_disabled_routing(base, disabled), section);
-    splice_after(&routed, COMMENTS_ANCHOR_HEADING, comments.section())
+    let answered = splice_after(&routed, ANSWERS_ANCHOR_HEADING, answers.section());
+    splice_after(&answered, COMMENTS_ANCHOR_HEADING, comments.section())
 }
 
 /// The section for `packs` (name and lines, in the order given); empty when no pack has a line.
@@ -454,9 +462,9 @@ fn splice_after(template: &str, anchor: &str, section: &str) -> String {
 }
 
 /// The text an install puts into the managed block of the rules artifact `artifact`: its bundled
-/// base with the routing and comment policy of `sources` composed in (see [`compose`]). A source
-/// that is a symlink, missing, or not UTF-8 is an error, and so is a `disabled-skills.json` or a
-/// `comment-policy.json` that cannot be read.
+/// base with the routing, comment policy and answer style of `sources` composed in (see
+/// [`compose`]). A source that is a symlink, missing, or not UTF-8 is an error, and so is a
+/// `disabled-skills.json`, a `comment-policy.json` or an `answer-style.json` that cannot be read.
 pub fn rules_source_text<R: SourceRoot + ?Sized>(
     artifact: &ArtifactId,
     sources: &R,
@@ -470,7 +478,14 @@ pub fn rules_source_text<R: SourceRoot + ?Sized>(
         String::from_utf8(bytes).map_err(|_| "rules source is not valid UTF-8".to_string())?;
     let disabled = sources.disabled().map_err(str::to_string)?;
     let comments = sources.comment_policy().map_err(str::to_string)?;
-    Ok(compose(&text, disabled, sources.pack_routing(), comments))
+    let answers = sources.answer_style().map_err(str::to_string)?;
+    Ok(compose(
+        &text,
+        disabled,
+        sources.pack_routing(),
+        comments,
+        answers,
+    ))
 }
 
 /// Whether the installed rules file at `installed` carries the source of `artifact` (the bundled
@@ -580,12 +595,18 @@ mod tests {
     fn harness_default_composes_nothing_and_each_level_follows_scope() {
         let none = BTreeSet::new();
         assert_eq!(
-            compose(SCOPED, &none, "", CommentPolicy::HarnessDefault),
+            compose(
+                SCOPED,
+                &none,
+                "",
+                CommentPolicy::HarnessDefault,
+                AnswerStyle::HarnessDefault
+            ),
             SCOPED
         );
         for level in [CommentPolicy::Minimal, CommentPolicy::Off] {
             assert_eq!(
-                compose(SCOPED, &none, "", level),
+                compose(SCOPED, &none, "", level, AnswerStyle::HarnessDefault),
                 SCOPED.replace(
                     "## Evidence\n",
                     &format!("{}\n## Evidence\n", level.section())
@@ -600,11 +621,17 @@ mod tests {
         let base = "## Skill routing\n- Bugs: `diagnose`.\n- Security: `security-review`.\n\n## Scope\nNever `security-review` here.\n\n## Claude harness\n- Security changes use `security-review`.\n- Skills install to `~/.claude/skills`.\n";
         let disabled = BTreeSet::from(["security-review".to_string()]);
         assert_eq!(
-            compose(base, &disabled, "", CommentPolicy::HarnessDefault),
+            compose(base, &disabled, "", CommentPolicy::HarnessDefault, AnswerStyle::HarnessDefault),
             "## Skill routing\n- Bugs: `diagnose`.\n\n## Scope\nNever `security-review` here.\n\n## Claude harness\n- Skills install to `~/.claude/skills`.\n"
         );
         assert_eq!(
-            compose(base, &BTreeSet::new(), "", CommentPolicy::HarnessDefault),
+            compose(
+                base,
+                &BTreeSet::new(),
+                "",
+                CommentPolicy::HarnessDefault,
+                AnswerStyle::HarnessDefault
+            ),
             base
         );
     }
@@ -613,7 +640,13 @@ mod tests {
     fn the_comment_section_composes_with_disabled_skills_and_pack_routing() {
         let disabled = BTreeSet::from(["tdd".to_string()]);
         let section = render_section([("mine", &["- Canvas: `my-canvas`.".to_string()][..])]);
-        let composed = compose(SCOPED, &disabled, &section, CommentPolicy::Off);
+        let composed = compose(
+            SCOPED,
+            &disabled,
+            &section,
+            CommentPolicy::Off,
+            AnswerStyle::HarnessDefault,
+        );
         assert_eq!(
             composed,
             format!(
@@ -628,13 +661,121 @@ mod tests {
         let none = BTreeSet::new();
         let off = CommentPolicy::Off.section();
         assert_eq!(
-            compose(BASE, &none, "", CommentPolicy::Off),
+            compose(
+                BASE,
+                &none,
+                "",
+                CommentPolicy::Off,
+                AnswerStyle::HarnessDefault
+            ),
             format!("{BASE}\n{off}")
         );
         // A trailing `## Scope` section has no next heading: the section still ends the text.
         assert_eq!(
-            compose("## Scope\nStay.\n", &none, "", CommentPolicy::Off),
+            compose(
+                "## Scope\nStay.\n",
+                &none,
+                "",
+                CommentPolicy::Off,
+                AnswerStyle::HarnessDefault
+            ),
             format!("## Scope\nStay.\n\n{off}")
+        );
+    }
+
+    const SPOKEN: &str = "# Rules\n\n## Communication\nBe brief.\n\n## Skill routing\n- Bugs: `diagnose`.\n- Tests: `tdd`.\n\n## Scope\nStay in scope.\n\n## Evidence\nCite.\n";
+
+    #[test]
+    fn harness_default_adds_no_answer_section_and_plain_follows_communication() {
+        let none = BTreeSet::new();
+        for comments in [
+            CommentPolicy::HarnessDefault,
+            CommentPolicy::Minimal,
+            CommentPolicy::Off,
+        ] {
+            assert_eq!(
+                compose(SPOKEN, &none, "", comments, AnswerStyle::HarnessDefault),
+                with_comments(SPOKEN, comments),
+                "{comments:?}"
+            );
+        }
+        assert_eq!(
+            compose(
+                SPOKEN,
+                &none,
+                "",
+                CommentPolicy::HarnessDefault,
+                AnswerStyle::Plain
+            ),
+            SPOKEN.replace(
+                "## Skill routing\n",
+                &format!("{}\n## Skill routing\n", AnswerStyle::Plain.section())
+            )
+        );
+    }
+
+    /// `SPOKEN` with the section of `comments` after its `## Scope` section.
+    fn with_comments(text: &str, comments: CommentPolicy) -> String {
+        if comments == CommentPolicy::HarnessDefault {
+            return text.to_string();
+        }
+        text.replace(
+            "## Evidence\n",
+            &format!("{}\n## Evidence\n", comments.section()),
+        )
+    }
+
+    #[test]
+    fn the_answer_section_composes_with_the_comment_section_pack_routing_and_disabled_skills() {
+        let disabled = BTreeSet::from(["tdd".to_string()]);
+        let section = render_section([("mine", &["- Canvas: `my-canvas`.".to_string()][..])]);
+        let composed = compose(
+            SPOKEN,
+            &disabled,
+            &section,
+            CommentPolicy::Off,
+            AnswerStyle::Plain,
+        );
+        assert_eq!(
+            composed,
+            format!(
+                "# Rules\n\n## Communication\nBe brief.\n\n{}\n## Skill routing\n- Bugs: `diagnose`.\n\n{section}\n## Scope\nStay in scope.\n\n{}\n## Evidence\nCite.\n",
+                AnswerStyle::Plain.section(),
+                CommentPolicy::Off.section()
+            )
+        );
+    }
+
+    #[test]
+    fn without_a_communication_section_the_answer_section_goes_last() {
+        let none = BTreeSet::new();
+        let plain = AnswerStyle::Plain.section();
+        let off = CommentPolicy::Off.section();
+        assert_eq!(
+            compose(
+                BASE,
+                &none,
+                "",
+                CommentPolicy::HarnessDefault,
+                AnswerStyle::Plain
+            ),
+            format!("{BASE}\n{plain}")
+        );
+        // Without either anchor both sections end the text, the answer section first.
+        assert_eq!(
+            compose(BASE, &none, "", CommentPolicy::Off, AnswerStyle::Plain),
+            format!("{BASE}\n{plain}\n{off}")
+        );
+        // A trailing `## Communication` section has no next heading: the section still ends the text.
+        assert_eq!(
+            compose(
+                "## Communication\nBe.\n",
+                &none,
+                "",
+                CommentPolicy::HarnessDefault,
+                AnswerStyle::Plain
+            ),
+            format!("## Communication\nBe.\n\n{plain}")
         );
     }
 
