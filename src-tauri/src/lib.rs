@@ -59,6 +59,8 @@ mod window_placement;
 mod workspace_layout;
 
 #[cfg(test)]
+mod answer_style_contract;
+#[cfg(test)]
 mod app_data_migration_contract;
 #[cfg(test)]
 mod claude_settings_contract;
