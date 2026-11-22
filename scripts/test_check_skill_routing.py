@@ -172,7 +172,7 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.assert_fails("references the files of skill 'tdd'")
 
     def test_user_invoked_skill_without_its_codex_policy_file_fails(self) -> None:
-        for name in ("retro", "grill-me"):
+        for name in ("retro", "grill-me", "raise-the-bar"):
             policy = self.skill(name).parent / "agents" / "openai.yaml"
             self.assertTrue(policy.is_file(), policy)
             policy.unlink()
