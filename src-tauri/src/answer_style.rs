@@ -34,16 +34,18 @@ pub const SECTION_HEADING: &str = "## Answer style";
 pub const PLAIN_SECTION: &str = concat!(
     "## Answer style\n",
     "Write answers in plain technical language, in the user's language. Lead with the answer. ",
-    "Aim for sentences of about 20 words or fewer, with one idea each. ",
-    "Use active voice and name who or what acts. Use one term for one thing. ",
-    "Write prose in full sentences. Write a procedure as numbered steps, one action per step. ",
-    "Put a warning or a condition in its own sentence before the step it affects. ",
-    "Keep lists, tables and code blocks where the content is parallel or meant to be copied; ",
-    "a list item may be a fragment. ",
-    "Keep every fact, number, path and caveat: cut words, not content. ",
-    "About one sentence in five may break these rules when a reason or a trade-off reads better as ",
-    "one longer sentence. ",
-    "Leave code, commands, identifiers, quoted output and required report headings unchanged.\n",
+    "Aim for sentences of about 20 words or fewer, with one idea each. Use active voice in ",
+    "every sentence and list item: make the one who acts the subject (\"I removed the file\", ",
+    "\"the test skips Windows\"), not the thing acted on (\"the file was removed\", \"Windows ",
+    "is skipped\"). Say \"I\" for your own actions. Use the passive only when the actor is ",
+    "unknown. Use one term for one thing. Write prose in full sentences. Write a procedure as ",
+    "numbered steps, one action per step. Put a warning or a condition in its own sentence ",
+    "before the step it affects. Keep lists, tables and code blocks where the content is ",
+    "parallel or meant to be copied; a list item may be a fragment. Keep every fact, number, ",
+    "path and caveat: cut words, not content. About one sentence in five may break the length ",
+    "and one-idea rules when a reason or a trade-off reads better as one longer sentence; the ",
+    "active-voice rule has no such allowance. Leave code, commands, identifiers, quoted output ",
+    "and required report headings unchanged.\n",
 );
 
 /// How agents word their answers.

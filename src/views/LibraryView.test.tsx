@@ -1246,7 +1246,7 @@ describe("Library answer style", () => {
     for (const name of ["Harness default", "Plain"]) expect(group.getByText(name)).toBeTruthy();
     expect(within(answerRow("Harness default")).getByText("In use")).toBeTruthy();
     expect(within(answerRow("Harness default")).queryByRole("button", { name: "Use" })).toBeNull();
-    expect(within(answerRow("Plain")).getByText("Plain asks agents for short active sentences, the answer first, and numbered steps. A repository's own rules still win.")).toBeTruthy();
+    expect(within(answerRow("Plain")).getByText("Asks agents for the answer first, short active sentences and numbered steps. A repository's own rules still win.")).toBeTruthy();
     expect(within(answerRow("Plain")).getByRole("button", { name: "Use" })).toBeTruthy();
   });
 

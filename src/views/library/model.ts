@@ -237,7 +237,7 @@ function commentPolicyGroup(input: LibraryModelInput): LibraryGroup | null {
 /** The answer style's levels, in the order shown, each said in one line. */
 export const ANSWER_STYLE_LEVELS: readonly { level: AnswerStyleLevel; name: string; desc: string }[] = [
   { level: "harness_default", name: "Harness default", desc: "Adds nothing: each agent keeps its own habits and your repositories' rules." },
-  { level: "plain", name: "Plain", desc: "Plain asks agents for short active sentences, the answer first, and numbered steps. A repository's own rules still win." },
+  { level: "plain", name: "Plain", desc: "Asks agents for the answer first, short active sentences and numbered steps. A repository's own rules still win." },
 ];
 
 /** The "Answer style" group: one row per level, the one in use marked, the others offering Use. */
