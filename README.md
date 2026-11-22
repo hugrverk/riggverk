@@ -232,6 +232,7 @@ Several bundled skills adapt methods from open skill collections. The wording is
 | [dementev-dev/adversarial-review](https://github.com/dementev-dev/adversarial-review) | the read-only critic and its adjudication | Apache-2.0 |
 | [openai/skills](https://github.com/openai/skills) | `ci-triage`, `review-response` | Apache-2.0 |
 | [t3dotgg/tstack](https://github.com/t3dotgg/tstack) | `pr-workflow`, `review-response`, `pr-modernize` | MIT |
+| [robonuggets/be-ambitious](https://github.com/robonuggets/be-ambitious), after Felix Rieseberg's article on ambition | the levers behind `raise-the-bar` | MIT |
 | [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) | `security-audit` (vendored) | MIT |
 | [anthropics/skills](https://github.com/anthropics/skills) | the framing behind `frontend-design` | Apache-2.0 |
 | [emilkowalski/skills](https://github.com/emilkowalski/skills) | the motion guidance in `frontend-design` | MIT |
