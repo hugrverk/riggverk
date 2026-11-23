@@ -99,4 +99,5 @@ Use the workspace final report (Changed, Verified, Not verified, Risk, Next) and
 
 ### Light harnesses
 
-- Copilot, Pi, Kilo, Antigravity and Grok usually have no subagents. Start external CLI lanes through the `delegate` skill. With none, say so and ask whether to work through the slices yourself, one at a time, which is not orchestration.
+- Copilot, Pi, Kilo and Grok usually have no subagents. Start external CLI lanes through the `delegate` skill. With none, say so and ask whether to work through the slices yourself, one at a time, which is not orchestration.
+- Antigravity has built-in subagents: `research` for mapping and review, and `self` in its own worktree (the `branch` workspace option) for write lanes. External CLI lanes through the `delegate` skill work too.
