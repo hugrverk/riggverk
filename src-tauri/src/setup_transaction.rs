@@ -30,7 +30,7 @@ pub const ARTIFACT_MANIFEST_SCHEMA_VERSION: u32 = 5;
 /// A plan over the limit fails before the first write, so an upgrade that does not fit is one the
 /// user can never apply: the limit has to cover the largest legitimate first upgrade with room
 /// to spare. That is a profile from before the shared skill files with every harness enabled
-/// (nine, Antigravity with two skill folders of its own): the whole bundle, retired adapters and
+/// (nine, Antigravity with a skill folder of its own): the whole bundle, retired adapters and
 /// their manifest, skills in every wanted folder, the app's older copies in other folders
 /// (including removed skills), and agent, rules and config files, tested in
 /// `skill_folders_contract` with half again as margin for future skills. Real plans do not grow

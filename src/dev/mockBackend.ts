@@ -1499,7 +1499,7 @@ function lightHealthWithRules(harness: LightAgent): LightRuntimeHealth {
         : harness === "kilo" || harness === "grok"
           ? ["~/.claude/skills", "~/.agents/skills"]
           : harness === "antigravity"
-            ? ["~/.gemini/config/skills", "~/.gemini/antigravity-cli/skills"]
+            ? ["~/.gemini/config/skills"]
             : ["~/.agents/skills"],
     },
     warnings: [
@@ -1807,8 +1807,8 @@ async function emitProgress(task: string, files: string[], options: { backup?: b
 /* ---- effective skill loads ---- */
 
 /**
- * Copilot, Pi and Kilo list their folders by precedence: the first one holding a name wins. Antigravity's App and IDE
- * read the first of its two, its CLI the second.
+ * Copilot, Pi and Kilo list their folders by precedence: the first one holding a name wins. Antigravity's App reads the
+ * first of its two only; its CLI reads both and ranks the second higher.
  */
 const SKILL_READ_FOLDERS: Record<InstallAgent, SkillReadFolder[]> = {
   claude: ["claude"],
@@ -1846,8 +1846,8 @@ function installedSkillFolders(enabled: readonly InstallAgent[]): SkillReadFolde
   return [
     ...(on("claude") ? ["claude" as const] : []),
     ...(agents ? ["agents" as const] : []),
-    // Antigravity reads neither shared folder: its own two are installed while it is on.
-    ...(on("antigravity") ? ["antigravity_app" as const, "antigravity_cli" as const] : []),
+    // Antigravity reads neither shared folder: its App folder, which every surface reads, is installed while it is on.
+    ...(on("antigravity") ? ["antigravity_app" as const] : []),
   ];
 }
 

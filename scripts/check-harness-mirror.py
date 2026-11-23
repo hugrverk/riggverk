@@ -284,8 +284,8 @@ def check_harness_ids(root: Path) -> list[str]:
     same_set("ReadFolder::ALL", "ALL", folders_all, "the enum", folders)
     folders_wire = [serde_name(name, folder_rename) for name in folders]
     same_set("SkillReadFolder", "SkillReadFolder", ts_union(types, "SkillReadFolder", TS_TYPES), "ReadFolder", folders_wire)
-    # Every folder the app installs into is one a harness reads, under the same wire name, so the UI can name it
-    # (Antigravity's two folders are install roots of their own).
+    # Every skill root is a folder a harness reads, under the same wire name, so the UI can name it (Antigravity's
+    # two folders are skill roots of their own: the App's is installed into, the CLI's only cleaned up).
     install_roots, root_rename = rust_enum(roots, "SkillRoot", RUST_ROOTS)
     same_set("SkillRoot::ALL", "ALL", rust_const_list(roots, "SkillRoot", "ALL", RUST_ROOTS), "the enum", install_roots)
     unread = [serde_name(name, root_rename) for name in install_roots if serde_name(name, root_rename) not in folders_wire]

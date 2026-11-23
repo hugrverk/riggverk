@@ -1160,27 +1160,29 @@ mod tests {
     }
 
     #[test]
-    fn antigravity_reads_its_two_own_folders_and_no_shared_one() {
+    fn antigravity_is_judged_by_its_app_folder_and_no_shared_one() {
         let fixture = Skills::new("skills-antigravity");
         fixture.install(".claude/skills", &["alpha", "beta"]);
         fixture.install(".agents/skills", &["alpha", "beta"]);
+        // Only the CLI reads its own folder, and nothing is installed there.
+        fixture.install(".gemini/antigravity-cli/skills", &["alpha", "beta"]);
         for custom in [false, true] {
             let on = [HarnessId::Claude, HarnessId::Codex];
             let skills = fixture.skills(HarnessId::Antigravity, Some(&on), custom);
             assert_eq!(
                 skills.roots,
-                [
-                    "~/.gemini/config/skills",
-                    "~/.gemini/antigravity-cli/skills"
-                ],
-                "the App and IDE folder, then the CLI folder (custom: {custom})"
+                ["~/.gemini/config/skills"],
+                "the folder every surface reads (custom: {custom})"
             );
-            assert_eq!(skills.status, "missing", "the shared folders do not count");
+            assert_eq!(skills.status, "missing", "only the App folder counts");
         }
-        fixture.install(".gemini/config/skills", &["alpha", "beta"]);
+        fixture.install(".gemini/config/skills", &["alpha"]);
         let partial = fixture.skills(HarnessId::Antigravity, None, false);
-        assert_ne!(partial.status, "synced", "the CLI folder is still empty");
-        fixture.install(".gemini/antigravity-cli/skills", &["alpha", "beta"]);
+        assert_eq!(
+            (partial.status.as_str(), partial.synced, partial.expected),
+            ("partial", 1, 2)
+        );
+        fixture.install(".gemini/config/skills", &["beta"]);
         assert_eq!(
             fixture.skills(HarnessId::Antigravity, None, false).status,
             "synced"

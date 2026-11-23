@@ -465,11 +465,6 @@ fn flags_for(harness: HarnessId, copies: &[SkillCopy]) -> Vec<SkillLoadFlag> {
     if copies.len() < 2 {
         return Vec::new();
     }
-    // Antigravity's App and CLI each read one folder: one copy per folder is one copy per
-    // surface, not a duplicate.
-    if harness == HarnessId::Antigravity && one_per_folder(copies) {
-        return Vec::new();
-    }
     if copies.iter().any(|copy| copy.owner == Owner::Foreign) {
         return vec![SkillLoadFlag::ForeignCopy];
     }
@@ -484,6 +479,9 @@ fn flags_for(harness: HarnessId, copies: &[SkillCopy]) -> Vec<SkillLoadFlag> {
             }]
         }
         HarnessId::Cursor => vec![SkillLoadFlag::PossibleDuplicate],
+        // Antigravity: the App reads one folder; the CLI loads one copy per name, the one in
+        // `antigravity-cli/skills` before `config/skills`. A copy of the app's there is one older
+        // versions left, and the next update removes it.
         HarnessId::Claude | HarnessId::Antigravity => Vec::new(),
         HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo | HarnessId::Grok => {
             let same = copies.windows(2).all(|pair| pair[0].hash == pair[1].hash);
@@ -494,15 +492,6 @@ fn flags_for(harness: HarnessId, copies: &[SkillCopy]) -> Vec<SkillLoadFlag> {
             }]
         }
     }
-}
-
-/// Whether no two copies sit in one folder.
-fn one_per_folder(copies: &[SkillCopy]) -> bool {
-    copies.iter().enumerate().all(|(index, copy)| {
-        copies[..index]
-            .iter()
-            .all(|other| other.folder != copy.folder)
-    })
 }
 
 /// Index of the copy `harness` loads, when it can be told. A single copy is the one. A harness
@@ -975,13 +964,14 @@ mod tests {
     }
 
     #[test]
-    fn antigravity_loads_one_copy_per_surface_from_its_own_folders_only() {
+    fn antigravity_reads_its_own_two_folders_only_and_flags_a_copy_of_the_users() {
         let fixture = Fixture::new("antigravity");
         let (older, _guard) = shipped_alpha_v1();
         // The shared folders hold a copy too; Antigravity reads neither.
         fixture.skill(".claude/skills", "alpha", &fixture.current("alpha"));
         fixture.skill(".agents/skills", "alpha", &fixture.current("alpha"));
         fixture.skill(".gemini/config/skills", "alpha", &fixture.current("alpha"));
+        // An older copy of the app's that a previous version left in the CLI folder.
         fixture.skill(".gemini/antigravity-cli/skills", "alpha", &older);
         let a = HarnessId::Antigravity;
         let loads = fixture.loads(&[a]);
@@ -999,10 +989,34 @@ mod tests {
             copy_folders(alpha),
             [ReadFolder::AntigravityApp, ReadFolder::AntigravityCli]
         );
-        // The App loads one and the CLI the other: no duplicate, and no single winner.
+        // Both copies are the app's: no flag, and no single winner (the App and the CLI rank
+        // the folders differently).
+        assert!(alpha.copies.iter().all(|copy| copy.owner == Owner::Aw));
         assert!(alpha.flags.is_empty(), "{:?}", alpha.flags);
         assert_eq!(alpha.winner, None);
         assert_eq!(alpha.copies[0].path, "~/.gemini/config/skills/alpha");
+        assert!(loads.foreign_duplicates.is_empty());
+
+        // An edited copy in the CLI folder is the user's: the CLI loads it over the app's, and
+        // the app cannot fix that.
+        fixture.skill(
+            ".gemini/antigravity-cli/skills",
+            "alpha",
+            "---\nname: alpha\n---\nmine\n",
+        );
+        let loads = fixture.loads(&[a]);
+        let alpha = skill(of(&loads, a), "alpha");
+        assert_eq!(alpha.copies[1].owner, Owner::Foreign);
+        assert_eq!(alpha.flags, vec![SkillLoadFlag::ForeignCopy]);
+        assert_eq!(alpha.winner, None);
+        assert_eq!(
+            loads
+                .foreign_duplicates
+                .iter()
+                .map(|dup| (dup.name.as_str(), dup.harnesses.clone()))
+                .collect::<Vec<_>>(),
+            vec![("alpha", vec![a])]
+        );
     }
 
     #[test]
