@@ -249,12 +249,18 @@ struct ClaudeFacts {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum EnvRule {
     /// A `Read(<pattern>)` rule whose last path segment names `.env` and matches the name `.env`
-    /// as a gitignore glob: `Read(**/.env)`, `Read(./.env)`, `Read(*.env)`. Not `Read(**/.env.*)`,
-    /// which leaves `.env` itself readable, nor `Read(./.envrc)` or `Edit(./.env)`.
-    Blocks,
-    /// A `Read(!<pattern>)` negation whose last segment matches the name `.env`: it carves `.env`
-    /// back out of the rules listed before it (`Read(!.env)`, `Read(!*)`).
+    /// as a gitignore glob, in every folder: no folder part or `**/` before it (`Read(.env)`,
+    /// `Read(*.env)`, `Read(**/.env)`, `Read(./**/.env)`). Not `Read(**/.env.*)`, which leaves
+    /// `.env` itself readable, nor `Read(./.envrc)` or `Edit(./.env)`.
+    BlocksEveryFolder,
+    /// The same rule for the project root only: `Read(./.env)`.
+    BlocksRoot,
+    /// A `Read(!<pattern>)` negation whose last segment matches the name `.env`, whatever its
+    /// folder part: it carves `.env` back out of the rules listed before it (`Read(!.env)`,
+    /// `Read(!*)`, `Read(!./a/.env)`).
     Reopens,
+    /// Anything else, a rule for one named place (`Read(./b/.env)`, `Read(~/.env)`,
+    /// `Read(//etc/.env)`) included: it leaves `.env` open everywhere else.
     Other,
 }
 
@@ -269,28 +275,42 @@ fn env_rule(rule: &str) -> EnvRule {
         Some(rest) => (true, rest),
         None => (false, pattern),
     };
-    let segment = pattern.rsplit('/').next().unwrap_or(pattern);
+    let (folder, segment) = match pattern.rsplit_once('/') {
+        Some((folder, segment)) => (Some(folder), segment),
+        None => (None, pattern),
+    };
     let matches = glob_segment_matches(segment.as_bytes(), b".env");
     match (negated, matches) {
         // In doubt `.env` is open: any negation that can match the name reopens it.
         (true, true) => EnvRule::Reopens,
-        (false, true) if segment.contains(".env") => EnvRule::Blocks,
+        (false, true) if segment.contains(".env") => match folder {
+            None | Some("**" | "./**") => EnvRule::BlocksEveryFolder,
+            Some(".") => EnvRule::BlocksRoot,
+            Some(_) => EnvRule::Other,
+        },
         _ => EnvRule::Other,
     }
 }
 
 /// Whether the `deny` list, read in order like Claude Code reads it, ends with `.env` blocked: a
-/// blocking rule blocks it, a later negation that matches `.env` reopens it, and a negation listed
-/// before any blocking rule carves nothing out. Anchors (`/`, `~/`, `//`) and directory patterns
-/// are not modelled; every doubt leaves `.env` open, which at worst shows the suggested lines.
+/// rule for every folder blocks it, a later negation that matches `.env` reopens it, and a
+/// negation listed before any blocking rule carves nothing out. A rule for the project root only
+/// blocks it while no negation has reopened it, since the reopened folder may be another one;
+/// after that only a rule for every folder blocks it again. Rules for one named folder or an
+/// anchor (`/`, `~/`, `//`) never count; every doubt leaves `.env` open, which at worst shows the
+/// suggested lines.
 fn denies_env_reads<'a>(rules: impl IntoIterator<Item = &'a str>) -> bool {
-    rules
+    let (denied, _reopened) = rules
         .into_iter()
-        .fold(false, |denied, rule| match env_rule(rule) {
-            EnvRule::Blocks => true,
-            EnvRule::Reopens => false,
-            EnvRule::Other => denied,
-        })
+        .fold((false, false), |(denied, reopened), rule| {
+            match env_rule(rule) {
+                EnvRule::BlocksEveryFolder => (true, false),
+                EnvRule::BlocksRoot => (denied || !reopened, reopened),
+                EnvRule::Reopens => (false, reopened || denied),
+                EnvRule::Other => (denied, reopened),
+            }
+        });
+    denied
 }
 
 /// A gitignore-style match of one path segment: `*` matches any run of bytes and `?` one byte;
@@ -889,6 +909,47 @@ mod tests {
             r#"["Read(./.envrc)","Read(src/**)","Read(.environment)"]"#
         ));
         assert!(!denied(r#"["Edit(**/.env)","Bash(cat .env)","Read"]"#));
+    }
+
+    #[test]
+    fn env_deny_for_one_folder_does_not_cover_another() {
+        // Any folder: no folder part, or `**/` (also `./**/`).
+        assert!(denies_env_reads(["Read(.env)"]));
+        assert!(denies_env_reads(["Read(*.env)"]));
+        assert!(denies_env_reads(["Read(**/.env)"]));
+        assert!(denies_env_reads(["Read(./**/.env)"]));
+        // The project root only counts while no negation has reopened `.env` in some folder.
+        assert!(denies_env_reads(["Read(./.env)"]));
+        assert!(denies_env_reads(["Read(!.env)", "Read(./.env)"]));
+        assert!(!denies_env_reads([
+            "Read(**/.env)",
+            "Read(!./a/.env)",
+            "Read(./.env)"
+        ]));
+        assert!(denies_env_reads([
+            "Read(**/.env)",
+            "Read(!./a/.env)",
+            "Read(**/.env)",
+            "Read(./.env)"
+        ]));
+        // One named place is not a blocking rule.
+        for one_place in [
+            "Read(./b/.env)",
+            "Read(b/.env)",
+            "Read(*/.env)",
+            "Read(/.env)",
+            "Read(~/.env)",
+            "Read(//etc/.env)",
+            "Read(**/b/.env)",
+        ] {
+            assert!(!denies_env_reads([one_place]), "{one_place}");
+        }
+        // Only b/.env is denied again after a/.env was reopened.
+        assert!(!denies_env_reads([
+            "Read(**/.env)",
+            "Read(!./a/.env)",
+            "Read(./b/.env)"
+        ]));
     }
 
     #[test]

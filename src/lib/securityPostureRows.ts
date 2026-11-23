@@ -62,7 +62,7 @@ const COPY: Record<FindingCode, Copy> = {
   ),
   claude_sandbox_off: fixed("sandbox", "sandbox.enabled is not true · shell commands run without the OS sandbox"),
   claude_env_read_denied: fixed(".env reads", "a Read deny rule names .env · matches the tool call, not other programs"),
-  claude_env_read_open: fixed(".env reads", "no Read deny rule names .env in permissions.deny"),
+  claude_env_read_open: fixed(".env reads", "no Read deny rule in permissions.deny covers .env in every folder"),
   claude_config_dir_set: fixed("scope", "CLAUDE_CONFIG_DIR is set · Claude reads its settings there; not checked"),
   codex_no_sandbox: fixed("sandbox", "sandbox_mode is danger-full-access · no OS sandbox"),
   codex_sandbox_workspace: fixed("sandbox", "sandbox_mode is workspace-write"),

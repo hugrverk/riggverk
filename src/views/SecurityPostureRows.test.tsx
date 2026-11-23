@@ -47,7 +47,7 @@ describe("SecurityPostureRows", () => {
     expect(rowsOf(notes)).toEqual([
       ["bypass mode", "starts in bypassPermissions mode: no permission prompts", "Worth a look"],
       ["sandbox", "sandbox.enabled is not true · shell commands run without the OS sandbox", "Tip"],
-      [".env reads", "no Read deny rule names .env in permissions.deny", "Tip"],
+      [".env reads", "no Read deny rule in permissions.deny covers .env in every folder", "Tip"],
       ["not checked", "project and managed config, profiles, command-line flags and aliases", null],
       ["baseline", "Library > Docs > Security Baseline", null],
     ]);
