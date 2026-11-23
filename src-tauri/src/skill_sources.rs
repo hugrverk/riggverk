@@ -379,8 +379,13 @@ impl SkillSources {
             }
         }
         let by_name = index_by_name(&catalog);
-        let (held, record_problem) = compute_held(workspace_root, &packs, &catalog);
+        let (mut held, record_problem) = compute_held(workspace_root, &packs, &catalog);
         let disabled = crate::disabled_skills::load(workspace_root);
+        // A disabled skill is wanted nowhere, so its copies are retired even while its pack cannot
+        // be read.
+        if let Ok(disabled) = &disabled {
+            held.retain(|held| !disabled.contains(&held.name));
+        }
         let routing_section = render_routing(&packs, &catalog, &disabled);
         let comment_policy = crate::comment_policy::load(workspace_root);
         let answer_style = crate::answer_style::load(workspace_root);
@@ -468,6 +473,25 @@ impl SkillSources {
     /// The pack the catalog takes the skill `name` from; `None` for a bundled skill.
     pub fn pack_of(&self, name: &str) -> Option<&str> {
         self.find(name)?.pack.as_deref()
+    }
+
+    /// The pack `pack-skills.json` records each skill under that the catalog lacks (one that left
+    /// its pack, or whose pack is gone or forgotten), by name. Empty while the record cannot be
+    /// used. A name recorded under two packs takes the first in name order.
+    pub fn recorded_packs_outside_catalog(&self) -> BTreeMap<String, String> {
+        let recorded = read_recorded(&self.workspace_root);
+        if recorded.problem.is_some() {
+            return BTreeMap::new();
+        }
+        let mut packs = BTreeMap::new();
+        for (pack, names) in recorded.packs {
+            for name in names {
+                if self.find(&name).is_none() {
+                    packs.entry(name).or_insert_with(|| pack.clone());
+                }
+            }
+        }
+        packs
     }
 
     /// Pack skills the catalog holds, by name.

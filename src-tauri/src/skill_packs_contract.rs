@@ -1275,6 +1275,49 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_skill_removed_from_a_pack_keeps_its_pack_in_the_review() {
+        let env = Env::new("retired-review");
+        env.pack_skill("mine", None, "keep-me", "stays", &[]);
+        let gone = env.pack_skill("mine", None, "drop-me", "goes", &[("extra.md", "x\n")]);
+        assert!(env.apply().success);
+        fs::remove_dir_all(gone).expect("remove the skill from the pack");
+        assert_eq!(
+            env.recorded_packs()["packs"]["mine"],
+            serde_json::json!(["drop-me", "keep-me"]),
+            "the record still lists it before the removal"
+        );
+        let op = env
+            .preview()
+            .operations
+            .into_iter()
+            .find(|op| op.surface == SetupSurfaceId::Skills)
+            .expect("skills operation");
+        let removals: Vec<usize> = op
+            .details
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| line.starts_with("- "))
+            .map(|(index, _)| index)
+            .collect();
+        assert!(!removals.is_empty(), "{:?}", op.details);
+        for line in removals {
+            let writes: Vec<(&str, usize)> = op
+                .pack_writes
+                .iter()
+                .filter(|write| write.line == line)
+                .map(|write| (write.pack.as_str(), write.skills))
+                .collect();
+            assert_eq!(
+                writes,
+                vec![("mine", 1)],
+                "{}: {:?}",
+                op.details[line],
+                op.pack_writes
+            );
+        }
+    }
+
     // ── Unsafe packs ──
 
     #[cfg(unix)]

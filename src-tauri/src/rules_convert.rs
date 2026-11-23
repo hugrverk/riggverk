@@ -283,9 +283,13 @@ pub fn convert(
     let mut changes = section_changes(&to_lf(&closest.text), &user_text);
     // A comment policy or answer style section as the app wrote it is the app's text, never the
     // user's: the new block carries the level chosen now (see `comment_policy`, `answer_style`).
+    // The pack routing section is the app's whatever it holds: it is composed from the packs and
+    // the disabled skills, so it differs after any change of those, and the new block carries the
+    // routing composed now (see `pack_routing`).
     changes.changed.retain(|section| {
         !crate::comment_policy::is_app_section(&section.text)
             && !crate::answer_style::is_app_section(&section.text)
+            && section.heading.as_deref() != Some(crate::pack_routing::SECTION_HEADING)
     });
     let moved = moved_text(&changes.changed, file_label);
     let moved_for_file = if crlf {

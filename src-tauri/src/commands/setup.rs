@@ -2986,7 +2986,21 @@ fn attach_skill_details(
     let disabled = crate::skill_sources::SourceRoot::disabled(sources)
         .cloned()
         .unwrap_or_default();
-    let packs = setup_transaction::pack_of_skills(sources);
+    let mut packs = setup_transaction::pack_of_skills(sources);
+    // A skill that left its pack is no longer in the catalog; its removal still names the pack the
+    // record lists it under.
+    let removed: std::collections::BTreeSet<String> = planned
+        .iter()
+        .filter(|operation| operation.kind == OperationKind::Remove)
+        .filter_map(|operation| operation.artifact.as_skill_file())
+        .map(|file| file.skill.as_str().to_string())
+        .collect();
+    packs.extend(
+        sources
+            .recorded_packs_outside_catalog()
+            .into_iter()
+            .filter(|(skill, _)| removed.contains(skill)),
+    );
     let (details, pack_writes) =
         setup_transaction::skill_plan_details(&planned, &scope, &flagged, &disabled, &packs);
     for op in plan
