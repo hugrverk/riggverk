@@ -1120,6 +1120,41 @@ describe("useLibraryController pack changes", () => {
     });
     expect(onPacksChanged).not.toHaveBeenCalled();
   });
+
+  it("reads the base template again after a skill is disabled, so its routing lines follow", async () => {
+    let disabled = false;
+    const { result } = renderWithPackChanges(cmd => {
+      if (cmd === "read_agent_template") return Promise.resolve({ ...bundledDoc, content: disabled ? "" : "- Use `tdd`." });
+      if (cmd === "set_skills_enabled") {
+        disabled = true;
+        return Promise.resolve(null);
+      }
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+
+    await act(async () => result.current.loadAgentTemplate());
+    expect(result.current.agentTemplate?.content).toContain("`tdd`");
+    await act(async () => {
+      expect(await result.current.setSkillsEnabled(["tdd"], false)).toBe(true);
+    });
+
+    expect(result.current.agentTemplate?.content).not.toContain("`tdd`");
+  });
+
+  it("does not read a base template that was never opened when a skill is enabled or disabled", async () => {
+    const { result } = renderWithPackChanges(cmd => {
+      if (cmd === "set_skills_enabled") return Promise.resolve(null);
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+
+    await act(async () => {
+      expect(await result.current.setSkillsEnabled(["tdd"], false)).toBe(true);
+      expect(await result.current.setSkillsEnabled(["tdd"], true)).toBe(true);
+    });
+
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "read_agent_template")).toHaveLength(0);
+    expect(result.current.agentTemplate).toBeNull();
+  });
 });
 
 describe("useLibraryController drafts and reads", () => {

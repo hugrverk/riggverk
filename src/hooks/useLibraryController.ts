@@ -878,7 +878,8 @@ export function useLibraryController({
 
   /**
    * Disables (asking first: the next Update removes the installed copies) or enables skills for every harness, then
-   * lists the skills again. Resolves true once the choice is saved.
+   * lists the skills again, and reads the base template again when it is loaded: its routing lines that name the skills
+   * leave or come back. Resolves true once the choice is saved.
    */
   const setSkillsEnabled = useCallback(async (names: string[], enabled: boolean): Promise<boolean> => {
     if (names.length === 0) return false;
@@ -901,13 +902,13 @@ export function useLibraryController({
     }
     try {
       await invoke("set_skills_enabled", { names, enabled });
-      await reloadChangedPacks();
+      await Promise.all([reloadChangedPacks(), agentTemplate ? loadAgentTemplate() : null]);
       return true;
     } catch (e) {
       setError(`${enabled ? "Enable" : "Disable"} skill: ${e}`);
       return false;
     }
-  }, [confirm, reloadChangedPacks, setError, skillChoices]);
+  }, [agentTemplate, confirm, loadAgentTemplate, reloadChangedPacks, setError, skillChoices]);
 
   /**
    * Chooses how much agents comment code, for every harness, then reads the policy and the base template (which carries
