@@ -24,9 +24,9 @@ Identify the working mode before any visual decision:
 
 ## Routing boundaries
 
-- **screenshot**: diagnoses static screenshots; does not implement unless asked.
-- **frontend** (this skill): chooses visual direction and implements UI when requested.
-- **accessibility**: specialist accessibility audit; not a substitute for baseline a11y during implementation.
+- **screenshot-review**: diagnoses static screenshots; does not implement unless asked.
+- **frontend-design** (this skill): chooses visual direction and implements UI when requested.
+- **accessibility-review**: specialist accessibility audit; not a substitute for baseline a11y during implementation.
 - **browser-qa**: supplies runtime evidence after implementation.
 - **prototype**: explores uncertain variants without creating permanent parallel design systems.
 

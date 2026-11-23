@@ -24,7 +24,7 @@ Done when: the verified findings, each with its proof result and verdict, are re
 ## Roles
 
 - **Lead** (this session): resolves the roles, writes every brief, keeps scope, runs every proof and the verification, adjudicates, asks the user when needed and decides. Verification is never a role you hand to a model.
-- **Critic**: a new read-only agent every round, cold start. It never learns who wrote the work and never sees the implementer's reports or earlier rounds' discussion. Choose it by capability first: at least as capable as the author of the change (your own model when unknown), and between candidates of comparable capability, another model family. A weaker critic adds false alarms, not safety,. Your rules' exception that lets a critic run on the strongest model applies here.
+- **Critic**: a new read-only agent every round, cold start. It never learns who wrote the work and never sees the implementer's reports or earlier rounds' discussion. Choose it by capability first: at least as capable as the author of the change (your own model when unknown), and between candidates of comparable capability, another model family. A weaker critic adds false alarms, not safety. Your rules' exception that lets a critic run on the strongest model applies here.
 
 ## Choose the roles
 
@@ -198,7 +198,7 @@ Ledger: Review done in 1 round; changes requested; findings 2 accepted, 1 reject
 
 ### Cursor
 
-- Use Cursor's own subagents only: a fresh `inspector` (read-only) per round as the critic, . External critic CLIs are not offered from Cursor.
+- Use Cursor's own subagents only: a fresh `inspector` (read-only) per round as the critic. External critic CLIs are not offered from Cursor.
 
 ### Light harnesses
 
