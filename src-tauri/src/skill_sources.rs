@@ -475,6 +475,25 @@ impl SkillSources {
         self.find(name)?.pack.as_deref()
     }
 
+    /// The pack `pack-skills.json` records each skill under that the catalog lacks (one that left
+    /// its pack, or whose pack is gone or forgotten), by name. Empty while the record cannot be
+    /// used. A name recorded under two packs takes the first in name order.
+    pub fn recorded_packs_outside_catalog(&self) -> BTreeMap<String, String> {
+        let recorded = read_recorded(&self.workspace_root);
+        if recorded.problem.is_some() {
+            return BTreeMap::new();
+        }
+        let mut packs = BTreeMap::new();
+        for (pack, names) in recorded.packs {
+            for name in names {
+                if self.find(&name).is_none() {
+                    packs.entry(name).or_insert_with(|| pack.clone());
+                }
+            }
+        }
+        packs
+    }
+
     /// Pack skills the catalog holds, by name.
     fn active_pack_skills(&self) -> BTreeMap<&str, &str> {
         self.catalog
