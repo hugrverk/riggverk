@@ -90,6 +90,9 @@ struct RawHarness {
 #[serde(deny_unknown_fields)]
 struct RawCli {
     program: String,
+    /// The CLI version the harness's folders were checked with on a real install.
+    #[serde(default)]
+    checked_version: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -167,6 +170,9 @@ pub struct LightHarness {
     pub label: String,
     /// The CLI program name looked up on `PATH`; the only call made to it is `--version`.
     pub cli_program: String,
+    /// The CLI version its folders were checked with on a real install (`1.5.15`): the health
+    /// names it and warns about an older CLI.
+    pub cli_checked_version: Option<String>,
     /// The managed rules block; `None` for a harness that reads [`Self::shared_rules`] instead.
     pub rules: Option<LightRules>,
     /// The central harness whose managed rules file this harness reads; it has no rules surface
@@ -500,6 +506,20 @@ fn is_plain_label(label: &str) -> bool {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, ' ' | '-' | '.'))
         && label.trim() == label
+}
+
+/// `1.5.15` as numbers: exactly three dot-separated numbers, nothing else.
+pub(crate) fn version_numbers(text: &str) -> Option<(u64, u64, u64)> {
+    let mut parts = text.split('.');
+    let mut next = || -> Option<u64> {
+        let part = parts.next()?;
+        if part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        part.parse().ok()
+    };
+    let version = (next()?, next()?, next()?);
+    parts.next().is_none().then_some(version)
 }
 
 /// A bare program name: no path, no option-like leading dash, nothing a shell would interpret.
@@ -846,6 +866,13 @@ fn parse(text: &str) -> Result<Vec<LightHarness>, String> {
         if !is_bare_program_name(&harness.cli.program) {
             return Err(format!("{key}: cli.program is not a bare program name"));
         }
+        if let Some(checked) = &harness.cli.checked_version {
+            if version_numbers(checked).is_none() {
+                return Err(format!(
+                    "{key}: cli.checked_version is not three dot-separated numbers"
+                ));
+            }
+        }
         let (rules, shared_rules) = match (harness.rules, harness.shared_rules) {
             (Some(rules), None) => (Some(parse_rules(id, rules)?), None),
             (None, Some(shared)) => (None, Some(parse_shared_rules(&key, &shared)?)),
@@ -864,6 +891,7 @@ fn parse(text: &str) -> Result<Vec<LightHarness>, String> {
                 id,
                 label: harness.label,
                 cli_program: harness.cli.program,
+                cli_checked_version: harness.cli.checked_version,
                 rules,
                 shared_rules,
                 mcp: parse_mcp(id, harness.mcp)?,
@@ -1250,6 +1278,54 @@ mod tests {
             value["harnesses"]["pi"]["label"] = serde_json::json!(label);
             assert!(parse_value(&value).is_err(), "{label:?}");
         }
+    }
+
+    #[test]
+    fn a_checked_version_is_optional_and_three_numbers() {
+        let harnesses = parse(DESCRIPTOR).expect("the embedded descriptor validates");
+        assert_eq!(
+            harnesses
+                .iter()
+                .map(|harness| (harness.id, harness.cli_checked_version.as_deref()))
+                .collect::<Vec<_>>(),
+            vec![
+                (HarnessId::Copilot, None),
+                (HarnessId::Pi, None),
+                (HarnessId::Kilo, None),
+                (HarnessId::Antigravity, Some("1.5.15")),
+                (HarnessId::Grok, None),
+            ]
+        );
+        for accepted in ["0.0.0", "1.5.15", "10.20.300"] {
+            let mut value = valid();
+            value["harnesses"]["pi"]["cli"]["checked_version"] = serde_json::json!(accepted);
+            let parsed = parse_value(&value).expect(accepted);
+            let pi = parsed.iter().find(|h| h.id == HarnessId::Pi).unwrap();
+            assert_eq!(pi.cli_checked_version.as_deref(), Some(accepted));
+        }
+        for rejected in [
+            "",
+            "1.5",
+            "1.5.15.0",
+            "v1.5.15",
+            "1.5.15-beta",
+            "1..15",
+            " 1.5.15",
+            "1.5.x",
+            "-1.5.15",
+        ] {
+            let mut value = valid();
+            value["harnesses"]["pi"]["cli"]["checked_version"] = serde_json::json!(rejected);
+            assert!(
+                parse_value(&value)
+                    .unwrap_err()
+                    .contains("cli.checked_version"),
+                "{rejected:?}"
+            );
+        }
+        let mut value = valid();
+        value["harnesses"]["pi"]["cli"]["checked_version"] = serde_json::json!(1.5);
+        assert!(parse_value(&value).is_err(), "a number is not a version");
     }
 
     #[test]

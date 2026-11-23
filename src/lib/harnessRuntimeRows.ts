@@ -169,10 +169,16 @@ function cursorRows(health: CursorProfileHealth): KvItem[] {
   ];
 }
 
+/** The version the harness's folders were checked with, beside the found one; the backend warns when the found one is older. */
+function checkedNote(cli: LightCliHealth): string {
+  if (!cli.checked_version) return "";
+  return cli.checked_version === cli.version ? " · paths checked with this version" : ` · paths checked with ${cli.checked_version}`;
+}
+
 /** The CLI version, or why there is none. Nothing but `--version` is ever run, so there is nothing else to show. */
 function lightCliRow(cli: LightCliHealth): KvItem {
   switch (cli.status) {
-    case "found": return { label: "cli", value: `${cli.version ?? "found"}${cli.source === "nvm" ? " · nvm" : ""}`, tone: "ok" };
+    case "found": return { label: "cli", value: `${cli.version ?? "found"}${cli.source === "nvm" ? " · nvm" : ""}${checkedNote(cli)}`, tone: "ok" };
     case "missing": return { label: "cli", value: cli.detail, tone: "dim", wrap: true };
     default: return { label: "cli", value: "found · version unknown", tone: "dim" };
   }

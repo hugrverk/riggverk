@@ -1464,7 +1464,7 @@ function lightHealthWithRules(harness: LightAgent): LightRuntimeHealth {
           ? { status: "found", version: "7.8.12", source: "nvm", detail: "Kilo 7.8.12 (found in nvm v24.14.0, not on PATH)" }
           : harness === "grok"
             ? { status: "found", version: "0.4.2", source: "path", detail: "Grok 0.4.2" }
-            : { status: "found", version: "1.2.0", source: "path", detail: "Antigravity 1.2.0" };
+            : { status: "found", version: "1.5.15", source: "path", detail: "Antigravity 1.5.15; paths checked with agy 1.5.15", checked_version: "1.5.15" };
   const mcpSurface = `${harness}_mcp` as (typeof LIGHT_MCP_SURFACES)[number];
   const mcpState = surfaceStates.get(mcpSurface) ?? "not_installed";
   const mcpOn = settings.enabled_target_ids.includes(mcpSurface);

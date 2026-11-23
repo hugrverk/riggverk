@@ -21,7 +21,7 @@ use super::opencode_cli::{probe_version_with_env, VersionProbe, VERSION_TIMEOUT}
 use super::workspace::setup_workspace_target_path;
 use crate::agent_targets::{self, HarnessId};
 use crate::installation_status::{status_for_surfaces, InstallationState};
-use crate::light_harness::{self, LightHarness};
+use crate::light_harness::{self, version_numbers, LightHarness};
 use crate::light_mcp::EntryState;
 use crate::rules_block::{RulesConflict, RulesLayout};
 use crate::settings;
@@ -44,6 +44,10 @@ pub struct LightCliHealth {
     /// Where the program was found: `path`, or `nvm` when only a Node version folder of nvm has it.
     pub source: Option<String>,
     pub detail: String,
+    /// The CLI version the harness's folders were checked with, when the descriptor names one
+    /// and a version was read: the page shows it beside the found version.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checked_version: Option<String>,
 }
 
 /// The skills row of the health.
@@ -216,6 +220,7 @@ fn missing_cli(program: &str) -> LightCliHealth {
         detail: format!(
             "{program} is not on PATH; Riggverk does not read your shell profile, so start it from a shell where {program} runs"
         ),
+        checked_version: None,
     }
 }
 
@@ -249,20 +254,29 @@ fn inspect_cli(
             version: None,
             source,
             detail: format!("found, but its path is not valid text{found_in}"),
+            checked_version: None,
         };
     };
     match probe_version_with_env(program_path, timeout, extra_env) {
-        VersionProbe::Found(version) => LightCliHealth {
-            status: "found".into(),
-            detail: format!("{} {}{found_in}", harness.label, version.text),
-            version: Some(version.text),
-            source,
-        },
+        VersionProbe::Found(version) => {
+            let checked = checked_against(harness, &version.text).map(|(checked, _)| checked);
+            let note = checked
+                .map(|checked| format!("; paths checked with {program} {checked}"))
+                .unwrap_or_default();
+            LightCliHealth {
+                status: "found".into(),
+                detail: format!("{} {}{found_in}{note}", harness.label, version.text),
+                checked_version: checked.map(str::to_string),
+                version: Some(version.text),
+                source,
+            }
+        }
         VersionProbe::Unreadable => LightCliHealth {
             status: "unknown".into(),
             version: None,
             source,
             detail: format!("found, but {program} --version gave no version{found_in}"),
+            checked_version: None,
         },
         VersionProbe::TimedOut => LightCliHealth {
             status: "unknown".into(),
@@ -272,8 +286,24 @@ fn inspect_cli(
                 "found, but {program} --version timed out after {}s{found_in}",
                 timeout.as_secs()
             ),
+            checked_version: None,
         },
     }
+}
+
+/// Whether the found version is below the checked one, comparing the three numbers (`1.5.9` is
+/// below `1.5.15`); a pre-release or build suffix of the found version is ignored. `None` when
+/// either has no three numbers.
+fn older_than_checked(found: &str, checked: &str) -> Option<bool> {
+    let core = found.split(['-', '+']).next().unwrap_or(found);
+    Some(version_numbers(core)? < version_numbers(checked)?)
+}
+
+/// The version `harness`'s folders were checked with, and whether `found` is older, when both are
+/// three numbers.
+fn checked_against<'a>(harness: &'a LightHarness, found: &str) -> Option<(&'a str, bool)> {
+    let checked = harness.cli_checked_version.as_deref()?;
+    Some((checked, older_than_checked(found, checked)?))
 }
 
 // ── Skills ──
@@ -661,6 +691,15 @@ fn compute_health(harness: &LightHarness, inputs: &Inputs) -> LightRuntimeHealth
             label = harness.label
         ));
     }
+    if let Some(found) = cli.version.as_deref() {
+        if let Some((checked, true)) = checked_against(harness, found) {
+            warnings.push(format!(
+                "Riggverk's {label} folders were checked with {program} {checked}; {program} {found} is older and not checked. Update {program}, or confirm in it that the skills and rules load.",
+                label = harness.label,
+                program = harness.cli_program
+            ));
+        }
+    }
     if let Some(variable) = relocating_variable(harness.id) {
         if inputs.set_variables.contains(&variable) {
             // The harness's own file: its rules file, else (rules shared with a central
@@ -860,8 +899,8 @@ mod tests {
         for (id, program, output, expected) in [
             (HarnessId::Pi, "pi", "1.3.0", "1.3.0"),
             (HarnessId::Kilo, "kilo", "7.8.12", "7.8.12"),
-            // Antigravity's CLI is agy; its exact output is not pinned, a bare version is read.
-            (HarnessId::Antigravity, "agy", "1.2.0", "1.2.0"),
+            // Antigravity's CLI is agy; agy 1.5.15 prints one line, the bare version.
+            (HarnessId::Antigravity, "agy", "1.5.15", "1.5.15"),
         ] {
             let bin = Bin::new(program);
             bin.add(program, &format!("echo {output}"));
@@ -1431,6 +1470,140 @@ mod tests {
         ] {
             assert_eq!(pinned(entry.clone()), None, "{entry}");
         }
+    }
+
+    #[test]
+    fn the_checked_version_is_compared_number_by_number() {
+        for (found, older) in [
+            ("1.5.9", true),
+            ("1.5.14", true),
+            ("1.4.99", true),
+            ("0.9.0", true),
+            ("1.5.15", false),
+            ("1.5.15-beta.1", false),
+            ("1.5.15+build", false),
+            ("1.5.16", false),
+            ("1.6.0", false),
+            ("2.0.0", false),
+        ] {
+            assert_eq!(older_than_checked(found, "1.5.15"), Some(older), "{found}");
+        }
+        for found in ["1.5", "1.5.x", "dev", ""] {
+            assert_eq!(older_than_checked(found, "1.5.15"), None, "{found}");
+        }
+        assert_eq!(older_than_checked("1.5.9", "1.5"), None);
+    }
+
+    #[cfg(unix)]
+    fn antigravity_health(
+        fixture: &Skills,
+        path_env: &str,
+        timeout: Duration,
+    ) -> LightRuntimeHealth {
+        compute_health(
+            descriptor(HarnessId::Antigravity),
+            &Inputs {
+                home: &fixture.home,
+                bundled_root: Some(&fixture.bundle),
+                path_env,
+                enabled: Some(&[HarnessId::Antigravity]),
+                codex_custom: false,
+                set_variables: &[],
+                version_timeout: timeout,
+                workspace_root: None,
+                rules_on: false,
+                mcp_on: false,
+                claude_rules_managed: false,
+            },
+        )
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_agy_older_than_the_checked_one_gets_a_warning_and_never_unsupported() {
+        let _guard = crate::test_env::guard::lock();
+        let fixture = Skills::new("health-agy-older");
+        let bin = Bin::new("agy-older");
+        bin.add("agy", "echo 1.5.9");
+        let health = antigravity_health(&fixture, &bin.path_env(), Duration::from_secs(10));
+        assert_eq!(health.cli.version.as_deref(), Some("1.5.9"));
+        assert_eq!(health.cli.checked_version.as_deref(), Some("1.5.15"));
+        assert_eq!(
+            health.cli.detail,
+            "Antigravity 1.5.9; paths checked with agy 1.5.15"
+        );
+        assert_eq!(
+            health.warnings,
+            vec![
+                "Riggverk's Antigravity folders were checked with agy 1.5.15; agy 1.5.9 is older and not checked. Update agy, or confirm in it that the skills and rules load."
+                    .to_string()
+            ]
+        );
+        assert!(!health.warnings[0].contains("unsupported"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_agy_at_or_above_the_checked_one_gets_the_note_and_no_warning() {
+        let _guard = crate::test_env::guard::lock();
+        let fixture = Skills::new("health-agy-current");
+        let bin = Bin::new("agy-current");
+        for version in ["1.5.15", "1.5.16", "1.6.0", "2.0.0"] {
+            bin.add("agy", &format!("echo {version}"));
+            let health = antigravity_health(&fixture, &bin.path_env(), Duration::from_secs(10));
+            assert_eq!(health.cli.version.as_deref(), Some(version));
+            assert_eq!(health.cli.checked_version.as_deref(), Some("1.5.15"));
+            assert_eq!(
+                health.cli.detail,
+                format!("Antigravity {version}; paths checked with agy 1.5.15")
+            );
+            assert!(
+                health.warnings.is_empty(),
+                "{version}: {:?}",
+                health.warnings
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn without_a_version_or_a_checked_one_the_cli_row_stays_as_it_was() {
+        let _guard = crate::test_env::guard::lock();
+        let fixture = Skills::new("health-agy-none");
+        let bin = Bin::new("agy-none");
+        // Missing.
+        let missing = antigravity_health(&fixture, &bin.path_env(), Duration::from_secs(10));
+        assert_eq!(missing.cli.status, "missing");
+        // Unreadable.
+        bin.add("agy", "echo 'a local build'");
+        let unreadable = antigravity_health(&fixture, &bin.path_env(), Duration::from_secs(10));
+        assert_eq!(unreadable.cli.status, "unknown");
+        // Timed out (`exec` so the killed process is the sleeper itself).
+        bin.add("agy", "exec sleep 30");
+        let timed_out = antigravity_health(&fixture, &bin.path_env(), Duration::from_millis(300));
+        assert!(
+            timed_out.cli.detail.contains("timed out"),
+            "{}",
+            timed_out.cli.detail
+        );
+        for health in [&missing, &unreadable, &timed_out] {
+            assert!(
+                !health.cli.detail.contains("checked"),
+                "{}",
+                health.cli.detail
+            );
+            assert!(health.warnings.is_empty(), "{:?}", health.warnings);
+            assert_eq!(health.cli.checked_version, None);
+        }
+        // A harness without a checked version keeps its plain detail.
+        bin.add("pi", "echo 1.3.0");
+        let pi = inspect_cli(
+            descriptor(HarnessId::Pi),
+            &bin.path_env(),
+            None,
+            Duration::from_secs(10),
+        );
+        assert_eq!(pi.detail, "Pi 1.3.0");
     }
 
     #[test]

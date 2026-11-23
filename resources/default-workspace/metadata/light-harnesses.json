@@ -64,7 +64,7 @@
     },
     "antigravity": {
       "label": "Antigravity",
-      "cli": { "program": "agy" },
+      "cli": { "program": "agy", "checked_version": "1.5.15" },
       "rules": {
         "adapter": "antigravity",
         "target_rel": ".gemini/AGENTS.md",

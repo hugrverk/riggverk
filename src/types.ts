@@ -777,6 +777,8 @@ export interface LightCliHealth {
   /** `path`, or `nvm` when only a Node version folder of nvm has the program. */
   source: "path" | "nvm" | string | null;
   detail: string;
+  /** The CLI version the harness's folders were checked with on a real install, when the descriptor names one and a version was read. */
+  checked_version?: string | null;
 }
 
 export interface LightSkillsHealth {
