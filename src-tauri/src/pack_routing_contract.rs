@@ -753,4 +753,34 @@ mod tests {
             "{routing:?}"
         );
     }
+
+    #[test]
+    fn a_conversion_leaves_out_pack_routing_to_a_disabled_skill() {
+        let env = Env::new("convert-disabled-routing");
+        env.pack("mine", &["my-canvas", "my-files"]);
+        env.routing("mine", GOOD);
+        env.apply(&["skills", "claude_rules"]);
+
+        let before = env.read_claude();
+        let edited = before.replacen("Cite code as file:line.", "Cite code as path:line.", 1);
+        assert_ne!(before, edited);
+        fs::write(env.claude_file(), edited).expect("edit");
+        disable(&env, &["my-files"]);
+
+        let preview = crate::commands::preview_rules_conversion("claude_rules".into())
+            .expect("conversion preview");
+        assert!(preview.applicable, "{:?}", preview.reason);
+        assert_eq!(preview.moved_sections, vec!["## Evidence"]);
+        let (block, moved) = preview
+            .result
+            .split_once(crate::rules_block::END_MARKER)
+            .expect("END marker");
+        assert!(moved.contains("Cite code as path:line."), "{moved}");
+        assert!(!moved.contains(SECTION_HEADING), "{moved}");
+        assert!(!preview.result.contains("`my-files`"), "{}", preview.result);
+        assert!(
+            block.contains("- Canvas work: `my-canvas`."),
+            "the block gets the routing composed now"
+        );
+    }
 }
