@@ -21,7 +21,7 @@ Done when: each affected route loaded without unclassified console errors or fai
 - The change is backend-only and has no browser-visible behavior.
 - You did not run a browser; do not claim browser verification.
 
-## Browser QA vs screenshot
+## Browser QA vs Screenshot Review
 
 - `screenshot-review` critiques static images the user provides or that already exist.
 - Browser QA runs the product, loads routes, checks console/network behavior, performs interactions, and may capture screenshots as evidence.

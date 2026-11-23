@@ -50,7 +50,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 | `ci-triage` / `diagnose` | Ci-triage turns a red CI run into a classified failure and a local reproduction; diagnose finds the root cause from that loop. |
 | `diagnose` / `tdd` | Diagnose finds root cause; TDD locks behavior with a narrow test once the contract is clear. |
 | `minimal-implementation` / `adversarial-implementation` | `minimal-implementation` is one bounded patch by the current agent; `adversarial-implementation` runs that patch through a separate implementer and a fresh hostile critic per round, only when the user asks for it. |
-| `adversarial-review` / `/code-review` | `/code-review` (or the `inspector` agent) is the routine review; `adversarial-review` runs a fresh critic from another route and reports only findings the lead proved, only when the user asks for it. "Have a critic review it" about finished work or a plan means, not implement mode. |
+| `adversarial-review` / `/code-review` | `/code-review` (or the `inspector` agent) is the routine review; `adversarial-review` runs a fresh critic from another route and reports only findings the lead proved, only when the user asks for it. "Have a critic review it" about finished work or a plan means `adversarial-review`, not `adversarial-implementation`. |
 | `tdd` / `adversarial-test` | TDD has the current agent write each test and then the code; `adversarial-test` has a separate adversary write the tests and a separate implementer fix the code against them frozen, only when the user explicitly asks for it. |
 | `delegate` / `adversarial-implementation` | `delegate` hands one or more slices to other agents and the lead reviews and verifies each once; `adversarial-implementation` adds a fresh hostile critic every round and runs only when the user asks for it. |
 | `delegate` / `orchestrate` | `delegate` hands one or more slices to other agents and verifies each; `orchestrate` leads a whole goal through many such lanes with a charter, a ledger and an integration branch, only when the user asks for it. |
@@ -167,7 +167,7 @@ In the source repository `python3 scripts/check-skill-routing.py` validates ever
 
 - `metadata/agents.json` — sidecar metadata for agents under `agents/`. Does not modify agent runtime frontmatter.
 - `default_skills` mirrors the skills each Claude agent header preloads (`templates/claude/agents/<role>.header.yaml`), and `targets` mirrors `metadata/agent-adapters.json`; `scripts/check-skill-routing.py` enforces both.
-- Claude `repo-scout`, `inspector`, and `sentinel` have no shell (`Read, Grep, Glob`, plan mode), so the parent passes the diff or changed-file list in the prompt. The OpenCode variants read git state through their read-only bash profile.
+- Claude `repo-scout`, `inspector`, and `sentinel` have no shell (`Read, Grep, Glob`, plan mode), so the parent passes the diff or changed-file list in the prompt. The OpenCode variants are denied every shell command as well.
 
 ## Installing skills
 

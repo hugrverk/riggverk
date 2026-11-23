@@ -24,7 +24,7 @@ Done when: a fresh critic returned `VERDICT: APPROVE` or raised nothing you coul
 ## Roles
 
 - **Lead** (this session): resolves the roles, writes every brief, keeps scope, runs every proof and the verification, adjudicates, asks the user when needed and decides. Verification is never a role you hand to a model.
-- **Critic**: a new read-only agent every round, cold start. It never learns who wrote the work and never sees the implementer's reports or earlier rounds' discussion. Choose it by capability first: at least as capable as the implementer's model, and between candidates of comparable capability, another model family. A weaker critic adds false alarms, not safety,. Your rules' exception that lets a critic run on the strongest model applies here.
+- **Critic**: a new read-only agent every round, cold start. It never learns who wrote the work and never sees the implementer's reports or earlier rounds' discussion. Choose it by capability first: at least as capable as the implementer's model, and between candidates of comparable capability, another model family. A weaker critic adds false alarms, not safety. Your rules' exception that lets a critic run on the strongest model applies here.
 - **Implementer**: one delegated agent continued between rounds. It follows `minimal-implementation`.
 
 ## Choose the roles

@@ -31,7 +31,7 @@
             "A disabled skill also leaves the agent-specific lines of the rules that name it",
             "Several skill descriptions say what the skill is not for, so agents pick the right skill more often",
             "The `delegate` notes for OpenCode match what Riggverk's architect agent may start",
-            "OpenCode: the repo-scout, inspector, sentinel and scribe agents and the built-in explore agent have no shell, so they cannot change files through it. Give them the diff or the changed files in the prompt",
+            "OpenCode: the repo-scout, inspector, sentinel and scribe agents and the built-in explore agent are denied every shell command. Give them the diff or the changed files in the prompt",
             "OpenCode 2: the architect can delegate to repo-scout, sentinel and scribe. They were marked `hidden`, and OpenCode 2 leaves a hidden agent out of the list the model delegates from. They now also show in `@` autocomplete",
             "On OpenCode 2 the `plan` agent can write its plan. Its plan folder moved to `~/.opencode/plan/`, which Riggverk's rules denied",
             "Editing `AGENTS.md`, `opencode.json`, files under `.opencode/` and GitHub workflow files asks first also when OpenCode is started in a subfolder of the project",

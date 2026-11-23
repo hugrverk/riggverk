@@ -66,7 +66,7 @@ Review summaries and top-level comments, all pages:
 
 ```bash
 gh api --paginate --slurp repos/<owner>/<repo>/pulls/<number>/reviews > "<work>/reviews.json"; echo "exit=$?"
-gh api --paginate --slurp repos/<owner>/<repo>/issues/<number>/review-response > "<work>/review-response.json"; echo "exit=$?"
+gh api --paginate --slurp repos/<owner>/<repo>/issues/<number>/comments > "<work>/comments.json"; echo "exit=$?"
 ```
 
 - Skip resolved threads. List outdated ones apart: the code moved, so check whether the point still applies.
@@ -120,7 +120,7 @@ One reply per thread, in the thread, in the language of the PR.
 
 - Show all drafts together. The user approves, edits or drops each one, since replies go out in their name.
 - Post only the approved ones, writing each body to a temporary file to avoid shell quoting:
-  - in a review thread: `gh api repos/<owner>/<repo>/pulls/<number>/review-response/<comment-id>/replies -F body=@<file> --jq .html_url`, where `<comment-id>` is the `databaseId` of the thread's first comment;
+  - in a review thread: `gh api repos/<owner>/<repo>/pulls/<number>/comments/<comment-id>/replies -F body=@<file> --jq .html_url`, where `<comment-id>` is the `databaseId` of the thread's first comment;
   - top-level: `gh pr comment <number> -R <owner>/<repo> --body-file <file>`.
 - Confirm each post: both commands print the comment's URL on success. Report each URL. A post that printed none counts as not confirmed; look at the thread before retrying, so nothing goes out twice.
 - Never resolve threads, dismiss reviews or re-request review on your own; leave resolving to the reviewer or the user. Each of these needs its own explicit request.
