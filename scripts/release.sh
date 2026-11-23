@@ -649,11 +649,11 @@ check_version_and_notes() {
   fi
 }
 
-# Prints who signed release/linux/linux-build.json, or fails. The stamp holds the SHA-256 of each package, so a valid
-# signature from a key in $linux_signers ties the packages to that build: a folder replaced on the way to the Mac fails
-# here, before publish signs the AppImage with the updater key.
+# Prints who signed linux-build.json in the folder $1 (default release/linux), or fails. The stamp holds the SHA-256 of
+# each package, so a valid signature from a key in $linux_signers ties the packages to that build: a folder replaced on
+# the way to the Mac fails here, before publish signs the AppImage with the updater key.
 linux_stamp_signer() {
-  local stamp="$linux_dir/linux-build.json" principal
+  local stamp="${1:-$linux_dir}/linux-build.json" principal
   command -v ssh-keygen >/dev/null 2>&1 || return 1
   [ -s "$stamp.sig" ] && [ -s "$linux_signers" ] || return 1
   principal="$(ssh-keygen -Y find-principals -s "$stamp.sig" -f "$linux_signers" 2>/dev/null | head -n 1)"
@@ -806,7 +806,7 @@ cleanup_build_linux() {
 # Runs on the Linux machine at the commit publish will release: the same checks as publish, then the container build
 # (scripts/linux-build.sh) and the release names and stamp in release/linux. Nothing is tagged or uploaded here.
 cmd_build_linux() {
-  local allow_newer=0 commit build_dir key="$HOME/.ssh/id_ed25519" public signer
+  local allow_newer=0 commit build_dir staging key="$HOME/.ssh/id_ed25519" public signer
   while [ $# -gt 0 ]; do
     case "$1" in
       --dry-run) dry_run=1 ;;
@@ -865,18 +865,24 @@ cmd_build_linux() {
   step "build"
   scripts/linux-build.sh --out "$build_dir"
 
+  # Assembled and signed in $staging; release/linux is replaced only once the signature verifies, so a failed or
+  # cancelled signing keeps the build that was there.
   step "release files"
-  rm -rf "$linux_dir"
-  mkdir -p "$linux_dir"
-  cp "$build_dir/Riggverk_${version}_amd64.AppImage" "$linux_dir/Riggverk-v$version-linux-x86_64.AppImage"
-  cp "$build_dir/Riggverk_${version}_amd64.deb" "$linux_dir/Riggverk-v$version-linux-amd64.deb"
-  cp "$build_dir/Riggverk-${version}-1.x86_64.rpm" "$linux_dir/Riggverk-v$version-linux-x86_64.rpm"
-  python3 scripts/release_tools.py linux-stamp write --dir "$linux_dir" --version "$version" --commit "$commit"
+  staging="$tmp_dir/linux"
+  mkdir -p "$staging"
+  cp "$build_dir/Riggverk_${version}_amd64.AppImage" "$staging/Riggverk-v$version-linux-x86_64.AppImage"
+  cp "$build_dir/Riggverk_${version}_amd64.deb" "$staging/Riggverk-v$version-linux-amd64.deb"
+  cp "$build_dir/Riggverk-${version}-1.x86_64.rpm" "$staging/Riggverk-v$version-linux-x86_64.rpm"
+  python3 scripts/release_tools.py linux-stamp write --dir "$staging" --version "$version" --commit "$commit"
 
   step "sign"
-  ssh-keygen -Y sign -q -f "$key" -n "$linux_namespace" "$linux_dir/linux-build.json"
-  signer="$(linux_stamp_signer)" || fail "the signature of $linux_dir/linux-build.json does not verify against $linux_signers"
+  ssh-keygen -Y sign -q -f "$key" -n "$linux_namespace" "$staging/linux-build.json"
+  signer="$(linux_stamp_signer "$staging")" ||
+    fail "the signature of the new linux-build.json does not verify against $linux_signers; $linux_dir is unchanged"
   info "signed by $signer"
+  rm -rf "$linux_dir"
+  mkdir -p "$linux_dir"
+  cp -R "$staging/." "$linux_dir/"
   ls -l "$linux_dir" | sed '1d; s/^/  /'
 
   printf '\nNext: copy %s (all of it, with linux-build.json.sig) to %s in the checkout on the Mac (at the same commit), then run ./scripts/release.sh publish there.\n' \

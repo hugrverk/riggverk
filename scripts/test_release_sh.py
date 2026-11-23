@@ -680,6 +680,19 @@ class ReleaseShTests(unittest.TestCase):
         self.assertIn("built from HEAD", published.stdout)
         self.assertIn("linux-build.json is signed by builder", published.stdout)
 
+    def test_build_linux_keeps_the_verified_build_when_signing_fails(self) -> None:
+        self.merge_release_pr(NEXT)
+        self.add_linux_packages()
+        signature = self.repo / "release/linux/linux-build.json.sig"
+        previous = signature.read_bytes()
+
+        Path(f"{self.outsider_key}.pub").unlink()
+        result = self.release("build-linux", "--key", str(self.outsider_key))
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("does not verify against", result.stderr)
+        self.assertEqual(signature.read_bytes(), previous)
+
     def test_publish_refuses_linux_packages_without_a_signature_from_a_listed_key(self) -> None:
         self.linux_packages = False
         self.merge_release_pr(NEXT)
