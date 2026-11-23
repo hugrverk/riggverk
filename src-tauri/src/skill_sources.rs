@@ -379,8 +379,13 @@ impl SkillSources {
             }
         }
         let by_name = index_by_name(&catalog);
-        let (held, record_problem) = compute_held(workspace_root, &packs, &catalog);
+        let (mut held, record_problem) = compute_held(workspace_root, &packs, &catalog);
         let disabled = crate::disabled_skills::load(workspace_root);
+        // A disabled skill is wanted nowhere, so its copies are retired even while its pack cannot
+        // be read.
+        if let Ok(disabled) = &disabled {
+            held.retain(|held| !disabled.contains(&held.name));
+        }
         let routing_section = render_routing(&packs, &catalog, &disabled);
         let comment_policy = crate::comment_policy::load(workspace_root);
         let answer_style = crate::answer_style::load(workspace_root);

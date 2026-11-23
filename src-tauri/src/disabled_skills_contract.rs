@@ -563,6 +563,41 @@ mod tests {
     }
 
     #[test]
+    fn a_disabled_pack_skill_is_removed_when_its_pack_goes_missing() {
+        let env = Env::new("pack-missing");
+        env.pack_skill("mine", "my-checklist");
+        env.pack_skill("mine", "my-notes");
+        env.apply();
+        let installed = env.root(SkillRoot::Claude).join("my-checklist/SKILL.md");
+        let other = env.root(SkillRoot::Claude).join("my-notes/SKILL.md");
+        assert!(installed.is_file() && other.is_file());
+
+        env.disable(&["my-checklist", "tdd"]);
+        fs::remove_dir_all(env.ws.join("packs/mine")).expect("remove pack");
+        let held: Vec<String> = env
+            .sources()
+            .held()
+            .iter()
+            .map(|held| held.name.clone())
+            .collect();
+        assert_eq!(held, vec!["my-notes"], "only the enabled skill is held");
+        let kinds = env.kinds_of("my-checklist");
+        assert!(!kinds.is_empty());
+        assert!(kinds.iter().all(|(_, kind)| *kind == OperationKind::Remove));
+        assert!(
+            env.kinds_of("my-notes").is_empty(),
+            "the held one plans nothing"
+        );
+
+        env.apply();
+        assert!(!installed.exists());
+        assert!(
+            other.is_file(),
+            "the enabled skill of the missing pack stays"
+        );
+    }
+
+    #[test]
     fn disabling_a_bundled_skill_does_not_unshadow_a_pack_skill() {
         let env = Env::new("shadow");
         env.pack_skill("mine", "tdd");
