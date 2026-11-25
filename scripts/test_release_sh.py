@@ -38,15 +38,45 @@ VERSION_LINES = (
     ("package-lock.json", r'("name": "riggverk",\s*"version": ")[^"]*(")', 2),
     ("src-tauri/Cargo.lock", r'(name = "riggverk"\nversion = ")[^"]*(")', 1),
 )
+# GitHub releases are folders in $GH_STUB_RELEASES, one per tag, holding the uploaded files.
 GH_STUB = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >>"$GH_STUB_LOG"
 [ -z "${TAURI_SIGNING_PRIVATE_KEY+set}${TAURI_SIGNING_PRIVATE_KEY_PASSWORD+set}" ] || echo "gh saw the signing key" >>"$GH_STUB_LOG"
+release="$GH_STUB_RELEASES/${3:-}"
 case "$1 $2" in
   "auth status") exit 0 ;;
   "release view")
-    if [ -n "${GH_STUB_RELEASE_EXISTS:-}" ]; then echo "tag: $3"; exit 0; fi
+    if [ -n "${GH_STUB_RELEASE_EXISTS:-}" ] || [ -d "$release" ]; then echo "tag: $3"; exit 0; fi
     echo "release not found" >&2
     exit 1
+    ;;
+  "release create")
+    mkdir -p "$release"
+    shift 3
+    for arg in "$@"; do
+      if [ -f "$arg" ]; then cp "$arg" "$release/"; fi
+    done
+    ;;
+  "release delete")
+    [ -d "$release" ] || { echo "release not found" >&2; exit 1; }
+    rm -rf "$release"
+    ;;
+  "release download")
+    [ -d "$release" ] || { echo "release not found" >&2; exit 1; }
+    shift 3
+    out=.
+    patterns=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --dir) out="$2"; shift ;;
+        --pattern) patterns+=("$2"); shift ;;
+      esac
+      shift
+    done
+    mkdir -p "$out"
+    for pattern in "${patterns[@]}"; do
+      if [ -f "$release/$pattern" ]; then cp "$release/$pattern" "$out/"; fi
+    done
     ;;
   *) echo "gh stub: unexpected call: $*" >&2; exit 3 ;;
 esac
@@ -102,6 +132,8 @@ class ReleaseShTests(unittest.TestCase):
         self.repo = base / "repo"
         self.origin = base / "origin.git"
         self.gh_log = base / "gh.log"
+        self.gh_releases = base / "releases"
+        self.gh_releases.mkdir()
         bin_dir = base / "bin"
         bin_dir.mkdir()
         for name in ("cargo", "codesign", "ditto", "hdiutil", "lipo", "podman"):
@@ -126,6 +158,7 @@ class ReleaseShTests(unittest.TestCase):
             **os.environ,
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "GH_STUB_LOG": str(self.gh_log),
+            "GH_STUB_RELEASES": str(self.gh_releases),
             "SECURITY_STUB_LOG": str(self.security_log),
             "NPM_STUB_LOG": str(self.npm_log),
             "LINUX_BUILD_STUB_LOG": str(self.linux_build_log),
@@ -617,8 +650,9 @@ class ReleaseShTests(unittest.TestCase):
         skipped = self.release("publish", "--dry-run", "--no-linux")
 
         self.assertEqual(refused.returncode, 1)
-        self.assertIn("release/linux/linux-build.json is missing", refused.stderr)
+        self.assertIn(f"GitHub has no build candidate linux-candidate-v{NEXT}", refused.stderr)
         self.assertIn("run ./scripts/release.sh build-linux on Linux", refused.stderr)
+        self.assertNotIn("release download", self.gh_calls())
         self.assertEqual(skipped.returncode, 0, skipped.stderr)
         self.assertIn("Linux: skipped (--no-linux)", skipped.stdout)
         self.assertNotIn("release/linux/", skipped.stdout)
@@ -719,6 +753,124 @@ class ReleaseShTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("no valid signature from a key in scripts/linux-build-signers", result.stderr)
             self.assertNotIn("is signed by", result.stdout)
+
+    # The build candidate on GitHub
+
+    def upload_candidate(self, commit: str = "HEAD") -> Path:
+        """What build-linux uploads: release/linux of `commit`, moved to the stub's draft linux-candidate-v<version>."""
+        self.add_linux_packages(commit)
+        candidate = self.gh_releases / f"linux-candidate-v{NEXT}"
+        shutil.move(self.repo / "release/linux", candidate)
+        return candidate
+
+    def test_build_linux_uploads_the_candidate_and_a_rebuild_replaces_it(self) -> None:
+        self.linux_packages = False
+        self.merge_release_pr(NEXT)
+        candidate = self.gh_releases / f"linux-candidate-v{NEXT}"
+        commit = self.git("rev-parse", "HEAD").strip()
+
+        first = self.release("build-linux", "--key", str(self.signing_key))
+        (candidate / "left-over").write_text("from the first upload\n")
+        second = self.release("build-linux", "--key", str(self.signing_key))
+
+        for result in (first, second):
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"uploaded linux-candidate-v{NEXT} (draft prerelease of {commit})", result.stdout)
+        self.assertEqual(
+            sorted(path.name for path in candidate.iterdir()),
+            sorted(path.name for path in (self.repo / "release/linux").iterdir()),
+        )
+        self.assertEqual(len(list(candidate.iterdir())), 5)
+        calls = self.gh_calls()
+        self.assertIn(f"--draft --prerelease --target {commit}", calls)
+        self.assertEqual(calls.count(f"release delete linux-candidate-v{NEXT} --yes"), 1)
+        self.assertIn(f"deleted the previous linux-candidate-v{NEXT}", second.stdout)
+
+    def test_publish_dry_run_checks_the_candidate_and_keeps_it(self) -> None:
+        self.linux_packages = False
+        self.merge_release_pr(NEXT)
+        candidate = self.upload_candidate()
+        before = sorted(path.name for path in candidate.iterdir())
+
+        result = self.release("publish", "--dry-run")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"downloaded the build candidate linux-candidate-v{NEXT}", result.stdout)
+        self.assertIn("its linux-build.json is signed by builder", result.stdout)
+        self.assertIn(f"would take the build candidate linux-candidate-v{NEXT} as release/linux", result.stdout)
+        self.assertIn(f"would delete the build candidate linux-candidate-v{NEXT}, if there is one", result.stdout)
+        self.assertNotIn("release delete", self.gh_calls())
+        self.assertEqual(sorted(path.name for path in candidate.iterdir()), before)
+        self.assertFalse((self.repo / "release").exists())
+
+    def test_publish_takes_only_the_five_files_of_the_candidate(self) -> None:
+        self.linux_packages = False
+        self.merge_release_pr(NEXT)
+        candidate = self.upload_candidate()
+        (candidate / "extra.sh").write_text("not asked for\n")
+
+        # A real run up to the build, which makes no app here, so it stops before the release and the delete.
+        result = self.release("publish")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("the build did not produce", result.stderr)
+        self.assertEqual(
+            sorted(path.name for path in (self.repo / "release/linux").iterdir()),
+            sorted(
+                [
+                    f"Riggverk-v{NEXT}-linux-amd64.deb",
+                    f"Riggverk-v{NEXT}-linux-x86_64.AppImage",
+                    f"Riggverk-v{NEXT}-linux-x86_64.rpm",
+                    "linux-build.json",
+                    "linux-build.json.sig",
+                ]
+            ),
+        )
+        self.assertNotIn("release delete", self.gh_calls())
+        self.assertTrue(candidate.is_dir())
+
+    def test_publish_refuses_a_candidate_of_another_commit_or_with_a_replaced_file(self) -> None:
+        self.linux_packages = False
+        self.merge_release_pr(NEXT)
+
+        self.upload_candidate("HEAD^")
+        other_commit = self.release("publish", "--dry-run")
+        shutil.rmtree(self.gh_releases / f"linux-candidate-v{NEXT}")
+        # Replaced on the way: a new deb and a stamp rewritten to match it, under the builder's old signature.
+        candidate = self.upload_candidate()
+        (candidate / f"Riggverk-v{NEXT}-linux-amd64.deb").write_text("replaced\n")
+        signature = (candidate / "linux-build.json.sig").read_bytes()
+        self.python(
+            "scripts/release_tools.py", "linux-stamp", "write", "--dir", str(candidate), "--version", NEXT,
+            "--commit", self.git("rev-parse", "HEAD").strip(),
+        )
+        (candidate / "linux-build.json.sig").write_bytes(signature)
+        replaced = self.release("publish", "--dry-run")
+        replaced_real = self.release("publish")
+
+        self.assertEqual(other_commit.returncode, 1)
+        self.assertIn("were built from", other_commit.stderr)
+        self.assertIn("run ./scripts/release.sh build-linux again on this commit", other_commit.stderr)
+        for result in (replaced, replaced_real):
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("no valid signature from a key in scripts/linux-build-signers", result.stderr)
+        # Nothing refused is left behind to shadow a rebuilt candidate, and the candidate stays.
+        self.assertFalse((self.repo / "release/linux").exists())
+        self.assertFalse((self.repo / "release/linux-candidate").exists())
+        self.assertTrue(candidate.is_dir())
+        self.assertFalse(self.npm_log.exists())
+
+    def test_a_hand_copied_release_linux_takes_precedence_over_the_candidate(self) -> None:
+        self.merge_release_pr(NEXT)
+        # A candidate publish would refuse; release/linux (added by self.release) is used instead.
+        self.upload_candidate("HEAD^")
+
+        result = self.release("publish", "--dry-run")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("checked: release/linux holds the AppImage", result.stdout)
+        self.assertNotIn("release download", self.gh_calls())
+        self.assertNotIn("downloaded the build candidate", result.stdout)
 
     def test_build_linux_refuses_a_key_publish_would_not_accept(self) -> None:
         self.merge_release_pr(NEXT)

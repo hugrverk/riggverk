@@ -4,10 +4,12 @@
 #   scripts/release.sh prepare [--dry-run] [--since REV]   next CalVer version, notes draft, bump, release check, PR
 #   scripts/release.sh build-linux [--dry-run] [--allow-newer] [--key FILE]
 #                                                          on Linux: AppImage, deb and rpm of main into release/linux,
-#                                                          their stamp signed with an SSH key in scripts/linux-build-signers
+#                                                          their stamp signed with an SSH key in scripts/linux-build-signers,
+#                                                          uploaded as the draft build candidate linux-candidate-v<version>
 #   scripts/release.sh publish [--dry-run] [--allow-newer] [--no-linux]
 #                                                          on macOS: universal build, dmg, zip, the Linux packages from
-#                                                          release/linux, SHA256SUMS, tag and GitHub release
+#                                                          release/linux or the build candidate, SHA256SUMS, tag and
+#                                                          GitHub release
 #
 # App updates: with plugins.updater in src-tauri/tauri.conf.json, publish reads the signing key and its password from
 # the macOS Keychain into the environment of the tauri build alone, signs the updater archive, writes latest.json and
@@ -35,7 +37,8 @@ updater_repo=""
 # Keychain items (generic passwords) that hold the updater signing key and its password.
 updater_key_item="riggverk-updater-key"
 updater_password_item="riggverk-updater-password"
-# Where build-linux leaves the Linux packages and where publish takes them from (copied over from the Linux machine).
+# Where build-linux leaves the Linux packages and where publish takes them from (copied over from the Linux machine,
+# or downloaded from the build candidate when it is missing).
 linux_dir="release/linux"
 linux=0
 # The SSH public keys (allowed_signers format) whose signature on linux-build.json publish accepts, changed only by a
@@ -577,6 +580,21 @@ create_release() {
   printf '\nReleased: %s\n' "$url"
 }
 
+# After the release, whether release/linux came from the candidate in this run, an earlier one or by hand: the release
+# is out, so a candidate that cannot be deleted is a warning, not a failure.
+delete_linux_candidate() {
+  local tag="linux-candidate-v$version" output
+  if output="$(gh release delete "$tag" --yes 2>&1)"; then
+    info "deleted $tag"
+    return 0
+  fi
+  case "$output" in
+    *"release not found"*) info "no build candidate $tag to delete" ;;
+    *) printf 'WARN: v%s is released, but the build candidate %s was not deleted (%s): gh release delete %s --yes\n' \
+      "$version" "$tag" "$output" "$tag" >&2 ;;
+  esac
+}
+
 check_release_assets() {
   local uploaded file
   uploaded="$(gh release view "v$version" --json assets --jq '.assets[].name')"
@@ -663,27 +681,77 @@ linux_stamp_signer() {
   printf '%s\n' "$principal"
 }
 
-# The Linux packages build-linux left in release/linux: of this version, built from HEAD, unchanged, and signed by a
-# key in $linux_signers. --no-linux
-# releases macOS alone; installed Linux apps then fail their update check ("Could not check for a new version") until
-# the next release with Linux packages, since its latest.json has no linux-x86_64 entry.
+# The five files build-linux leaves in release/linux and uploads as the build candidate, into linux_names.
+set_linux_names() {
+  linux_names=("Riggverk-v$version-linux-x86_64.AppImage" "Riggverk-v$version-linux-amd64.deb"
+    "Riggverk-v$version-linux-x86_64.rpm" linux-build.json linux-build.json.sig)
+}
+
+# Downloads the five files of the build candidate into $1. The candidate needs no trust of its own: the checks after
+# this are the ones a hand-copied release/linux gets. Returns 1 when there is nothing to check.
+fetch_linux_candidate() {
+  local dir="$1" tag="linux-candidate-v$version" name patterns=()
+  if ! github_release_exists "$tag"; then
+    problem "no Linux packages: $linux_dir is missing and GitHub has no build candidate $tag (run ./scripts/release.sh build-linux on Linux, copy its $linux_dir here, or --no-linux)"
+    return 1
+  fi
+  set_linux_names
+  for name in "${linux_names[@]}"; do
+    patterns+=(--pattern "$name")
+  done
+  rm -rf "$dir"
+  if ! gh release download "$tag" --dir "$dir" "${patterns[@]}" >/dev/null; then
+    discard_linux_candidate "$dir"
+    problem "could not download the build candidate $tag"
+    return 1
+  fi
+  info "downloaded the build candidate $tag into $dir"
+}
+
+discard_linux_candidate() {
+  rm -rf "$1"
+  rmdir release 2>/dev/null || true
+}
+
+# The Linux packages build-linux left in release/linux, or in the build candidate when release/linux is missing: of this
+# version, built from HEAD, unchanged, and signed by a key in $linux_signers. A candidate that passes becomes
+# release/linux (a dry run only reports it); one that fails is removed again, so a rebuilt candidate is not shadowed.
+# --no-linux releases macOS alone; installed Linux apps then fail their update check ("Could not check for a new
+# version") until the next release with Linux packages, since its latest.json has no linux-x86_64 entry.
 check_linux() {
   local no_linux="$1"
   if [ "$no_linux" -eq 1 ]; then
     info "Linux: skipped (--no-linux)"
     return 0
   fi
-  local signer
-  if ! python3 scripts/release_tools.py linux-stamp check --dir "$linux_dir" --version "$version" --commit "$(git rev-parse HEAD)"; then
-    problem "no Linux packages of this commit in $linux_dir (run ./scripts/release.sh build-linux on Linux and copy $linux_dir here, or --no-linux)"
+  local signer dir="$linux_dir" candidate="" rebuild
+  rebuild="run ./scripts/release.sh build-linux on Linux and remove $linux_dir here to take its build candidate, copy its $linux_dir here, or --no-linux"
+  if [ ! -e "$linux_dir" ]; then
+    candidate="linux-candidate-v$version"
+    dir="release/linux-candidate"
+    rebuild="run ./scripts/release.sh build-linux again on this commit, or --no-linux"
+    fetch_linux_candidate "$dir" || return 0
+  fi
+  if ! python3 scripts/release_tools.py linux-stamp check --dir "$dir" --version "$version" --commit "$(git rev-parse HEAD)"; then
+    [ -z "$candidate" ] || discard_linux_candidate "$dir"
+    problem "no Linux packages of this commit in ${candidate:-$linux_dir} ($rebuild)"
     return 0
   fi
-  if signer="$(linux_stamp_signer)"; then
-    linux=1
-    info "checked: $linux_dir holds the AppImage, deb and rpm of $version, built from HEAD"
-    info "checked: $linux_dir/linux-build.json is signed by $signer ($linux_signers)"
+  if ! signer="$(linux_stamp_signer "$dir")"; then
+    [ -z "$candidate" ] || discard_linux_candidate "$dir"
+    problem "${candidate:-$linux_dir}: linux-build.json has no valid signature from a key in $linux_signers (build-linux signs it; do not publish packages that were changed or replaced on the way)"
+    return 0
+  fi
+  linux=1
+  info "checked: ${candidate:-$linux_dir} holds the AppImage, deb and rpm of $version, built from HEAD"
+  info "checked: its linux-build.json is signed by $signer ($linux_signers)"
+  [ -n "$candidate" ] || return 0
+  if [ "$dry_run" -eq 1 ]; then
+    discard_linux_candidate "$dir"
+    would "take the build candidate $candidate as $linux_dir"
   else
-    problem "$linux_dir/linux-build.json has no valid signature from a key in $linux_signers (build-linux signs it; do not publish packages that were changed or replaced on the way)"
+    mv "$dir" "$linux_dir"
+    info "$linux_dir is the build candidate $candidate"
   fi
 }
 
@@ -757,6 +825,7 @@ cmd_publish() {
     else
       would "release: gh release create v${version:-VERSION} ${release_assets[*]} --title 'Riggverk ${version:-VERSION}' --notes-file ${notes_file:-release-notes/VERSION.md} --verify-tag"
     fi
+    [ "$linux" -eq 0 ] || would "delete the build candidate linux-candidate-v${version:-VERSION}, if there is one, once v${version:-VERSION} is published"
     finish_dry_run
     return
   fi
@@ -790,6 +859,10 @@ cmd_publish() {
   write_checksums
   step "tag and GitHub release"
   create_release
+  if [ "$linux" -eq 1 ]; then
+    step "delete the build candidate"
+    delete_linux_candidate
+  fi
 }
 
 # ── build-linux ──
@@ -803,8 +876,28 @@ cleanup_build_linux() {
   exit "$status"
 }
 
+# Hands release/linux to publish as a draft prerelease of the release commit: a draft has no tag, is seen only by
+# people with write access and is never the latest release. A rebuild of the version replaces it.
+upload_linux_candidate() {
+  local commit="$1" tag="linux-candidate-v$version" name files=()
+  set_linux_names
+  for name in "${linux_names[@]}"; do
+    files+=("$linux_dir/$name")
+  done
+  if github_release_exists "$tag"; then
+    gh release delete "$tag" --yes >/dev/null ||
+      fail "could not delete the previous build candidate $tag; $linux_dir holds the new build (delete it by hand and run build-linux again, or copy $linux_dir to the Mac)"
+    info "deleted the previous $tag"
+  fi
+  gh release create "$tag" "${files[@]}" --draft --prerelease --target "$commit" --title "Linux build candidate $version" \
+    --notes "Linux packages of $commit for scripts/release.sh publish. Not a release." >/dev/null ||
+    fail "could not upload the build candidate $tag; $linux_dir holds the build (run build-linux again, or copy $linux_dir to the Mac)"
+  info "uploaded $tag (draft prerelease of $commit)"
+}
+
 # Runs on the Linux machine at the commit publish will release: the same checks as publish, then the container build
-# (scripts/linux-build.sh) and the release names and stamp in release/linux. Nothing is tagged or uploaded here.
+# (scripts/linux-build.sh), the release names and stamp in release/linux, and the upload of that folder as the build
+# candidate. Nothing is tagged or released here.
 cmd_build_linux() {
   local allow_newer=0 commit build_dir staging key="$HOME/.ssh/id_ed25519" public signer
   while [ $# -gt 0 ]; do
@@ -853,6 +946,7 @@ cmd_build_linux() {
     would "build: scripts/linux-build.sh (AppImage, deb and rpm of $commit in the Ubuntu 22.04 image)"
     would "copy them to $linux_dir as Riggverk-v${version:-VERSION}-linux-x86_64.AppImage, Riggverk-v${version:-VERSION}-linux-amd64.deb and Riggverk-v${version:-VERSION}-linux-x86_64.rpm, and write $linux_dir/linux-build.json (version, commit, SHA-256)"
     would "sign $linux_dir/linux-build.json with $key (ssh-keygen -Y sign -n $linux_namespace) and check the signature against $linux_signers"
+    would "upload $linux_dir as the draft prerelease linux-candidate-v${version:-VERSION} of $commit, replacing an earlier one"
     finish_dry_run
     return
   fi
@@ -885,8 +979,11 @@ cmd_build_linux() {
   cp -R "$staging/." "$linux_dir/"
   ls -l "$linux_dir" | sed '1d; s/^/  /'
 
-  printf '\nNext: copy %s (all of it, with linux-build.json.sig) to %s in the checkout on the Mac (at the same commit), then run ./scripts/release.sh publish there.\n' \
-    "$linux_dir" "$linux_dir"
+  step "build candidate"
+  upload_linux_candidate "$commit"
+
+  printf '\nNext: run ./scripts/release.sh publish on the Mac at the same commit, with no %s there; it downloads the candidate.\n' \
+    "$linux_dir"
 }
 
 case "${1:-}" in
