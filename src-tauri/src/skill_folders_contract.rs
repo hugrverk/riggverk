@@ -222,6 +222,31 @@ mod tests {
             self.add_records(records);
         }
 
+        /// Installs every file of every bundled skill in `root` as the previous version did, and
+        /// records each under the identity it used (one `SkillFile` per file).
+        fn install_previous_copies(&self, root: SkillRoot) {
+            let mut records = Vec::new();
+            for skill_files in catalog() {
+                let name = skill_files.name.as_str();
+                let source = crate::skill_discovery::canonical_skill_dir(&bundled(), name);
+                for rel in &skill_files.files {
+                    let bytes = fs::read(source.join(rel.as_str())).expect("source");
+                    write(&self.dest(root, name, rel.as_str()), &bytes);
+                    records.push(ManagedArtifactRecord {
+                        identity: artifact_identity(&ArtifactId::skill_file(
+                            root,
+                            skill_files.name.clone(),
+                            rel.clone(),
+                        )),
+                        hash: stable_digest::bytes(&bytes),
+                        surface: None,
+                        role_models: Default::default(),
+                    });
+                }
+            }
+            self.add_records(records);
+        }
+
         fn read_manifest(&self, transaction_id: &str) -> ArtifactTransactionManifest {
             let path = self
                 .base
@@ -878,14 +903,12 @@ mod tests {
         assert!(files_below(&env.root(SkillRoot::Claude)).len() > source_skill_count());
     }
 
-    // ── Antigravity: two folders of its own ──
+    // ── Antigravity: a folder of its own, and the CLI folder older versions filled ──
 
     const A: HarnessId = HarnessId::Antigravity;
-    const ANTIGRAVITY_ROOTS: [SkillRoot; 2] =
-        [SkillRoot::AntigravityApp, SkillRoot::AntigravityCli];
 
     #[test]
-    fn enabling_antigravity_fills_its_two_folders_and_nothing_else_in_one_transaction() {
+    fn enabling_antigravity_fills_its_folder_and_nothing_else_in_one_transaction() {
         let env = Env::new("light-antigravity-on");
         env.enable(&[C]);
         assert!(env.apply().success);
@@ -896,38 +919,29 @@ mod tests {
         let op = skills_operation(&plan);
         assert_eq!(
             op.details,
-            ANTIGRAVITY_ROOTS
-                .iter()
-                .map(|root| format!(
-                    "+ {} ({} skills, {} files)",
-                    root.display(),
-                    all.len(),
-                    file_count(&all)
-                ))
-                .collect::<Vec<_>>()
+            vec![format!(
+                "+ ~/.gemini/config/skills ({} skills, {} files)",
+                all.len(),
+                file_count(&all)
+            )]
         );
         let result = env.apply();
         assert!(result.success, "{}", result.message);
         assert_eq!(
             env.roots_with_files(),
-            vec![
-                SkillRoot::Claude,
-                SkillRoot::AntigravityApp,
-                SkillRoot::AntigravityCli
-            ]
+            vec![SkillRoot::Claude, SkillRoot::AntigravityApp]
         );
         assert!(env
             .home
             .join(".gemini/config/skills/tdd/SKILL.md")
             .is_file());
-        assert!(env
-            .home
-            .join(".gemini/antigravity-cli/skills/tdd/SKILL.md")
-            .is_file());
+        // Every Antigravity surface reads ~/.gemini/config/skills: a copy in the CLI's own
+        // folder would be a second one for the CLI.
+        assert!(!env.root(SkillRoot::AntigravityCli).exists());
         assert!(!env.root(SkillRoot::Agents).exists(), "no shared folder");
         assert!(!env.preview().has_pending_changes);
         let manifest = env.read_manifest(&result.transaction_id);
-        assert_eq!(manifest.operations.len(), 2 * file_count(&all));
+        assert_eq!(manifest.operations.len(), file_count(&all));
 
         // Rolling back removes exactly what that transaction wrote.
         let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
@@ -936,7 +950,7 @@ mod tests {
     }
 
     #[test]
-    fn antigravity_alone_is_served_by_its_folders_even_behind_an_isolated_codex_home() {
+    fn antigravity_alone_is_served_by_its_folder_even_behind_an_isolated_codex_home() {
         let env = Env::new("light-antigravity-isolated");
         env.enable(&[X, A]);
         let isolated = env.isolate_codex_home();
@@ -946,11 +960,7 @@ mod tests {
         assert!(isolated.join("skills/tdd/SKILL.md").is_file());
         assert_eq!(
             env.roots_with_files(),
-            vec![
-                SkillRoot::CodexHome,
-                SkillRoot::AntigravityApp,
-                SkillRoot::AntigravityCli
-            ]
+            vec![SkillRoot::CodexHome, SkillRoot::AntigravityApp]
         );
     }
 
@@ -961,19 +971,13 @@ mod tests {
         assert!(env.apply().success);
         // The user's own skill, an edited copy, a dot entry and the files of ~/.gemini that
         // belong to Antigravity and the Gemini CLI.
+        let app = env.root(SkillRoot::AntigravityApp);
+        write(&app.join("my-own-skill/SKILL.md"), b"mine\n");
         write(
-            &env.root(SkillRoot::AntigravityApp)
-                .join("my-own-skill/SKILL.md"),
-            b"mine\n",
-        );
-        write(
-            &env.dest(SkillRoot::AntigravityCli, "tdd", "SKILL.md"),
+            &env.dest(SkillRoot::AntigravityApp, "tdd", "SKILL.md"),
             b"my own tdd\n",
         );
-        write(
-            &env.root(SkillRoot::AntigravityCli).join(".hidden/SKILL.md"),
-            b"hidden\n",
-        );
+        write(&app.join(".hidden/SKILL.md"), b"hidden\n");
         write(&env.home.join(".gemini/GEMINI.md"), b"gemini\n");
         write(
             &env.home.join(".gemini/antigravity-cli/settings.json"),
@@ -983,30 +987,31 @@ mod tests {
         env.enable(&[C]);
         let plan = env.preview();
         let op = skills_operation(&plan);
-        assert!(
-            op.details.contains(&format!(
-                "- ~/.gemini/config/skills ({} skills, {} files, owned copies)",
-                catalog().len(),
-                file_count(&catalog())
-            )),
-            "{:?}",
-            op.details
-        );
-        assert!(
-            op.details
-                .contains(&"! ~/.gemini/antigravity-cli/skills/tdd (edited, kept)".to_string()),
-            "{:?}",
-            op.details
+        // tdd has one file, its SKILL.md, which is the edited one.
+        assert_eq!(
+            op.details,
+            vec![
+                format!(
+                    "- ~/.gemini/config/skills ({} skills, {} files, owned copies)",
+                    catalog().len() - 1,
+                    file_count(&catalog()) - 1
+                ),
+                "! ~/.gemini/config/skills/tdd (edited, kept)".to_string(),
+            ]
         );
         let result = env.apply();
         assert!(result.success, "{}", result.message);
         assert_eq!(
-            files_below(&env.root(SkillRoot::AntigravityApp)),
-            BTreeSet::from(["my-own-skill/SKILL.md".to_string()])
+            files_below(&app),
+            BTreeSet::from([
+                ".hidden/SKILL.md".to_string(),
+                "my-own-skill/SKILL.md".to_string(),
+                "tdd/SKILL.md".to_string(),
+            ])
         );
         assert_eq!(
-            files_below(&env.root(SkillRoot::AntigravityCli)),
-            BTreeSet::from([".hidden/SKILL.md".to_string(), "tdd/SKILL.md".to_string()])
+            fs::read(env.dest(SkillRoot::AntigravityApp, "tdd", "SKILL.md")).unwrap(),
+            b"my own tdd\n"
         );
         assert_eq!(
             fs::read(env.home.join(".gemini/GEMINI.md")).unwrap(),
@@ -1017,6 +1022,156 @@ mod tests {
             .join(".gemini/antigravity-cli/settings.json")
             .is_file());
         assert!(files_below(&env.root(SkillRoot::Claude)).len() > source_skill_count());
+        assert!(!env.preview().has_pending_changes);
+    }
+
+    #[test]
+    fn an_upgrade_empties_the_cli_folder_of_the_app_copies_and_keeps_the_app_folder() {
+        let env = Env::new("light-antigravity-upgrade");
+        env.enable(&[A]);
+        let all = catalog();
+        // The previous version filled both folders.
+        env.install_previous_copies(SkillRoot::AntigravityApp);
+        env.install_previous_copies(SkillRoot::AntigravityCli);
+        let cli = env.root(SkillRoot::AntigravityCli);
+        let previous = files_below(&cli);
+        // An edited copy, the user's own skill, a dot entry, and files of ~/.gemini that belong
+        // to Antigravity and the Gemini CLI.
+        write(
+            &env.dest(SkillRoot::AntigravityCli, "tdd", "SKILL.md"),
+            b"my own tdd\n",
+        );
+        write(&cli.join("my-own-skill/SKILL.md"), b"mine\n");
+        write(&cli.join(".hidden/SKILL.md"), b"hidden\n");
+        write(
+            &env.home.join(".gemini/antigravity-cli/settings.json"),
+            b"{}\n",
+        );
+        write(&env.home.join(".gemini/GEMINI.md"), b"gemini\n");
+        let app = env.root(SkillRoot::AntigravityApp);
+        let app_before: Vec<(String, Vec<u8>)> = files_below(&app)
+            .into_iter()
+            .map(|rel| {
+                let bytes = fs::read(app.join(&rel)).expect("app file");
+                (rel, bytes)
+            })
+            .collect();
+
+        let plan = env.preview();
+        let op = skills_operation(&plan);
+        // tdd has one file, its SKILL.md, which is the edited one.
+        assert_eq!(
+            op.details,
+            vec![
+                format!(
+                    "- ~/.gemini/antigravity-cli/skills ({} skills, {} files, owned copies)",
+                    all.len() - 1,
+                    file_count(&all) - 1
+                ),
+                "! ~/.gemini/antigravity-cli/skills/tdd (edited, kept; Antigravity reads both copies)"
+                    .to_string(),
+            ]
+        );
+        assert!(plan.has_pending_changes && !plan.is_blocked, "{plan:?}");
+
+        let result = env.apply();
+        assert!(result.success, "{}", result.message);
+        let app_after: Vec<(String, Vec<u8>)> = files_below(&app)
+            .into_iter()
+            .map(|rel| {
+                let bytes = fs::read(app.join(&rel)).expect("app file");
+                (rel, bytes)
+            })
+            .collect();
+        assert_eq!(app_after, app_before, "the App folder is unchanged");
+        assert_eq!(
+            files_below(&cli),
+            BTreeSet::from([
+                ".hidden/SKILL.md".to_string(),
+                "my-own-skill/SKILL.md".to_string(),
+                "tdd/SKILL.md".to_string(),
+            ])
+        );
+        assert_eq!(
+            fs::read(env.dest(SkillRoot::AntigravityCli, "tdd", "SKILL.md")).unwrap(),
+            b"my own tdd\n"
+        );
+        assert_eq!(
+            fs::read(env.home.join(".gemini/antigravity-cli/settings.json")).unwrap(),
+            b"{}\n"
+        );
+        assert_eq!(
+            fs::read(env.home.join(".gemini/GEMINI.md")).unwrap(),
+            b"gemini\n"
+        );
+        let manifest = env.read_manifest(&result.transaction_id);
+        assert_eq!(manifest.operations.len(), file_count(&all) - 1);
+        assert!(manifest
+            .operations
+            .iter()
+            .all(|op| op.kind == OperationKind::Remove && op.backup_rel.is_some()));
+        assert!(!env.preview().has_pending_changes);
+
+        // Rolling back restores the removed copies.
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "{}", rolled.message);
+        let mut expected = previous;
+        expected.insert(".hidden/SKILL.md".to_string());
+        expected.insert("my-own-skill/SKILL.md".to_string());
+        assert_eq!(files_below(&cli), expected);
+        assert_eq!(
+            fs::read(env.dest(SkillRoot::AntigravityCli, "diagnose", "SKILL.md")).unwrap(),
+            canonical("diagnose")
+        );
+    }
+
+    #[test]
+    fn an_upgrade_removes_a_cli_copy_whose_text_is_the_previous_release_not_the_bundle() {
+        // The copies an upgrade finds were written by the previous release, so a skill that
+        // changed since then differs from the bundle. The record proves it is the app's.
+        let env = Env::new("light-antigravity-upgrade-older-text");
+        env.enable(&[A]);
+        env.install_previous_copies(SkillRoot::AntigravityApp);
+        env.install_previous_copies(SkillRoot::AntigravityCli);
+        let older = b"the text the previous release shipped\n";
+        write(
+            &env.dest(SkillRoot::AntigravityCli, "diagnose", "SKILL.md"),
+            older,
+        );
+        let skill = catalog()
+            .into_iter()
+            .find(|skill| skill.name.as_str() == "diagnose")
+            .expect("diagnose");
+        let rel = skill
+            .files
+            .iter()
+            .find(|rel| rel.as_str() == "SKILL.md")
+            .expect("SKILL.md")
+            .clone();
+        env.add_records(vec![ManagedArtifactRecord {
+            identity: artifact_identity(&ArtifactId::skill_file(
+                SkillRoot::AntigravityCli,
+                skill.name.clone(),
+                rel,
+            )),
+            hash: stable_digest::bytes(older),
+            surface: None,
+            role_models: Default::default(),
+        }]);
+
+        let plan = env.preview();
+        let all = catalog();
+        assert_eq!(
+            skills_operation(&plan).details,
+            vec![format!(
+                "- ~/.gemini/antigravity-cli/skills ({} skills, {} files, owned copies)",
+                all.len(),
+                file_count(&all)
+            )]
+        );
+        let result = env.apply();
+        assert!(result.success, "{}", result.message);
+        assert!(files_below(&env.root(SkillRoot::AntigravityCli)).is_empty());
         assert!(!env.preview().has_pending_changes);
     }
 
@@ -1035,8 +1190,40 @@ mod tests {
             .iter()
             .filter(|op| op.kind == OperationKind::Create)
             .count();
-        // ~/.claude/skills, ~/.agents/skills and Antigravity's two folders.
-        assert!(creates >= 4 * file_count(&catalog()), "{creates}");
+        // ~/.claude/skills, ~/.agents/skills and Antigravity's folder.
+        assert!(creates >= 3 * file_count(&catalog()), "{creates}");
+        assert!(
+            operations + operations / 2 <= crate::setup_transaction::MAX_MANIFEST_OPERATIONS,
+            "{operations} operations leave less than half again as margin under the limit ({})",
+            crate::setup_transaction::MAX_MANIFEST_OPERATIONS
+        );
+    }
+
+    #[test]
+    fn the_upgrade_that_empties_the_antigravity_cli_folder_still_fits_one_transaction() {
+        // Once only: every harness enabled, every wanted folder written, and the copies the
+        // previous version put in ~/.gemini/antigravity-cli/skills removed as well.
+        let env = Env::new("budget-antigravity-cli");
+        env.enable(HarnessId::ALL);
+        env.install_previous_copies(SkillRoot::AntigravityCli);
+        let worst = build_worst_case(&env);
+        let count = |kind| worst.planned.iter().filter(|op| op.kind == kind).count();
+        let (creates, updates, removes) = (
+            count(OperationKind::Create),
+            count(OperationKind::Update),
+            count(OperationKind::Remove),
+        );
+        let operations = creates + updates + removes;
+        println!(
+            "antigravity cli transition: {operations} operations ({creates} create, {updates} update, {removes} remove)"
+        );
+        let files = file_count(&catalog());
+        assert!(creates >= 3 * files, "{creates}");
+        assert!(
+            removes >= worst.retired_workspace_files + worst.removed_skill_copies + files,
+            "{removes}"
+        );
+        assert_eq!(count(OperationKind::Conflict), 0);
         assert!(
             operations + operations / 2 <= crate::setup_transaction::MAX_MANIFEST_OPERATIONS,
             "{operations} operations leave less than half again as margin under the limit ({})",
@@ -1093,11 +1280,13 @@ mod tests {
     #[test]
     fn uninstall_removes_the_apps_copies_from_every_folder_and_nothing_else() {
         let env = Env::new("uninstall-all-roots");
-        // Antigravity's folders were only ever filled by this version: install them for real,
-        // before the older copies are laid down (that install would clean those up).
+        // Antigravity's App folder is installed for real, before the older copies are laid down
+        // (that install would clean those up); its CLI folder holds what the previous version put
+        // there.
         env.enable(&[A]);
         assert!(env.apply().success);
-        for root in ANTIGRAVITY_ROOTS {
+        env.install_previous_copies(SkillRoot::AntigravityCli);
+        for root in [SkillRoot::AntigravityApp, SkillRoot::AntigravityCli] {
             write(&env.root(root).join("my-own-skill/SKILL.md"), b"mine\n");
         }
         for (root, variant) in [

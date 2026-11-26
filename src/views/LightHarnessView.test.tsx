@@ -357,7 +357,7 @@ describe("LightHarnessView", () => {
     expect(facts(cell(detail("Kilo"), "skills")).reads).toBe("~/.kilo/skills (missing), ~/.agents/skills, ~/.claude/skills");
   });
 
-  it("names Antigravity's two own folders, the App's and the CLI's, in the skills cell", () => {
+  it("names both folders Antigravity reads in the skills cell, and counts the one installed into", () => {
     const skillLoads = skillLoadsOf({
       harnesses: [{
         harness: "antigravity",
@@ -372,11 +372,11 @@ describe("LightHarnessView", () => {
     renderLight("antigravity", health({
       harness: "antigravity",
       cli: { status: "found", version: "1.2.0", source: "path", detail: "Antigravity 1.2.0" },
-      skills: { status: "partial", synced: 17, expected: 34, roots: ["~/.gemini/config/skills", "~/.gemini/antigravity-cli/skills"] },
+      skills: { status: "partial", synced: 14, expected: 17, roots: ["~/.gemini/config/skills"] },
     }), { skillLoads });
     const antigravity = detail("Antigravity");
     expect(facts(cell(antigravity, "skills")).reads).toBe("~/.gemini/config/skills, ~/.gemini/antigravity-cli/skills (missing)");
-    expect(facts(antigravity).cli).toBe("1.2.0");
+    expect(facts(antigravity)).toMatchObject({ cli: "1.2.0", skills: "partial · 14/17" });
   });
 
   it("opens the install review for this harness with u and a read-only preview with p", () => {

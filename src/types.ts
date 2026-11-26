@@ -387,8 +387,9 @@ export interface InstallationStatus {
  * A skills folder a harness reads; `dot_codex` is the literal `~/.codex/skills`, whatever `CODEX_HOME` says.
  * `copilot`, `pi_agent`, `kilo` and `grok` are the private folders of the light harnesses (`~/.copilot/skills`,
  * `~/.pi/agent/skills`, `~/.kilo/skills`, `~/.grok/skills`); the app never installs into them. `antigravity_app`
- * (`~/.gemini/config/skills`) and `antigravity_cli` (`~/.gemini/antigravity-cli/skills`) are Antigravity's
- * own folders, which the app installs into while Antigravity is on.
+ * (`~/.gemini/config/skills`) is Antigravity's own folder, which every surface reads and the app installs into while
+ * Antigravity is on. `antigravity_cli` (`~/.gemini/antigravity-cli/skills`) is read by its CLI only; the app installs
+ * nothing there and removes the copies older versions put there.
  */
 export type SkillReadFolder =
   | "claude"
@@ -776,6 +777,8 @@ export interface LightCliHealth {
   /** `path`, or `nvm` when only a Node version folder of nvm has the program. */
   source: "path" | "nvm" | string | null;
   detail: string;
+  /** The CLI version the harness's folders were checked with on a real install, when the descriptor names one and a version was read. */
+  checked_version?: string | null;
 }
 
 export interface LightSkillsHealth {

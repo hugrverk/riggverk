@@ -76,5 +76,5 @@ A skill's `## Output` lists content to cover, not a replacement format: keep the
 - This base is the managed block of `~/.gemini/AGENTS.md`, the global rules file Google Antigravity reads in the App, the IDE and the CLI (`agy`). Riggverk manages only the block; text below its END marker is the user's.
 - Antigravity reads at most 24,000 bytes of one rules file. Keep refinements below the END marker short; Riggverk does not write a file that would pass the limit.
 - `~/.gemini/GEMINI.md` is shared with the Gemini CLI and Riggverk does not touch it. Antigravity adds the rules of every global file it reads, so keep one copy of a rule.
-- Skills install to `~/.gemini/config/skills` (App and IDE) and `~/.gemini/antigravity-cli/skills` (CLI). Antigravity reads neither `~/.agents/skills` nor `~/.claude/skills`.
+- Skills install to `~/.gemini/config/skills`, which the App, the IDE and the CLI read. The CLI also reads `~/.gemini/antigravity-cli/skills` and `~/.gemini/skills`; Riggverk installs nothing there. Antigravity reads neither `~/.agents/skills` nor `~/.claude/skills`.
 - Do not edit `antigravity-cli/settings.json` or `antigravity/mcp_oauth_tokens.json` in `~/.gemini`: they hold settings, state, and credentials. `config/agents/` holds the user's custom subagents; Riggverk installs none there.

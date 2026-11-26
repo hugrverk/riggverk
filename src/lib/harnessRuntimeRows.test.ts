@@ -364,6 +364,11 @@ describe("light harness runtime rows", () => {
     const rows = runtimeRowsFor({ harness: "kilo", health: health() }, LOADS);
     expect(labelsOf(rows)).toEqual(["cli", "rules", "mcp playwright", "skills", "skill loads"]);
     expect(rows[0]).toEqual({ label: "cli", value: "7.8.12", tone: "ok" });
+    // The version the folders were checked with stands beside the found one (Antigravity names one).
+    const checked = (version: string) =>
+      runtimeRowsFor({ harness: "antigravity", health: health({ harness: "antigravity", cli: { status: "found", version, source: "path", detail: "", checked_version: "1.5.15" } }) }, LOADS)[0].value;
+    expect(checked("1.5.15")).toBe("1.5.15 · paths checked with this version");
+    expect(checked("1.5.9")).toBe("1.5.9 · paths checked with 1.5.15");
     expect(rows[1]).toEqual({ label: "rules", value: "synced", tone: "ok", wrap: false });
     expect(rows[2]).toEqual({ label: "mcp playwright", value: "synced · 0.0.83", tone: "ok", wrap: false });
     expect(rows[3]).toEqual({ label: "skills", value: "synced · 17/17", tone: "ok" });

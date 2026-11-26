@@ -153,8 +153,8 @@ describe("mock backend: the light harnesses' Playwright MCP entries", () => {
 
     const antigravity = await invoke<LightRuntimeHealth>("get_light_runtime_health", { harness: "antigravity" });
     expect(antigravity.mcp).toMatchObject({ status: "off", path: "~/.gemini/config/mcp_config.json" });
-    expect(antigravity.cli).toMatchObject({ status: "found", detail: "Antigravity 1.2.0" });
-    expect(antigravity.skills.roots).toEqual(["~/.gemini/config/skills", "~/.gemini/antigravity-cli/skills"]);
+    expect(antigravity.cli).toMatchObject({ status: "found", detail: "Antigravity 1.5.15; paths checked with agy 1.5.15" });
+    expect(antigravity.skills.roots).toEqual(["~/.gemini/config/skills"]);
   });
 });
 
