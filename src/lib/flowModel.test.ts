@@ -109,8 +109,8 @@ describe("buildFlowModel sources and reach", () => {
   });
 
   it("groups off agents in model order and removes their individual curves", () => {
-    expect(model.agents.map(agent => agent.id)).toEqual(["codex", "cursor", "claude"]);
-    expect(model.offGroup?.agents.map(agent => agent.id)).toEqual(["opencode", "copilot", "pi", "kilo", "antigravity", "grok"]);
+    expect(model.agents.map(agent => agent.id)).toEqual(["codex", "claude", "cursor"]);
+    expect(model.offGroup?.agents.map(agent => agent.id)).toEqual(["opencode", "antigravity", "copilot", "pi", "kilo", "grok"]);
     expect(model.edges.filter(candidate => candidate.status === "ghost")).toHaveLength(0);
     expect(resolveRef(model, { type: "agent", id: "pi" })).toBeNull();
   });
@@ -128,21 +128,21 @@ describe("buildFlowModel sources and reach", () => {
     // The agents that are on keep their rows; those that are off follow, in sidebar order.
     expect(expanded.agents.map(agent => [agent.id, agent.status])).toEqual([
       ["codex", "active"],
-      ["cursor", "active"],
       ["claude", "active"],
+      ["cursor", "active"],
       ["opencode", "off"],
+      ["antigravity", "off"],
       ["copilot", "off"],
       ["pi", "off"],
       ["kilo", "off"],
-      ["antigravity", "off"],
       ["grok", "off"],
     ]);
     expect(expanded.agents.find(agent => agent.id === "pi")!.sub).toBe("off in Settings");
     const ghosts = expanded.edges.filter(candidate => candidate.status === "ghost");
-    expect(ghosts.map(candidate => candidate.agent)).toEqual(["opencode", "copilot", "pi", "kilo", "antigravity", "grok"]);
+    expect(ghosts.map(candidate => candidate.agent)).toEqual(["opencode", "antigravity", "copilot", "pi", "kilo", "grok"]);
     expect(ghosts.every(candidate => candidate.source === "base" && candidate.total > 0 && !candidate.glow)).toBe(true);
     // A ghost carries nothing: the base still reaches only the agents that are on.
-    expect(agentsReachedBy(expanded, "base").map(agent => agent.id)).toEqual(["codex", "cursor", "claude"]);
+    expect(agentsReachedBy(expanded, "base").map(agent => agent.id)).toEqual(["codex", "claude", "cursor"]);
     expect(resolveRef(expanded, { type: "agent", id: "pi" })).toEqual({ type: "agent", id: "pi" });
     expect(resolveRef(expanded, { type: "off", id: "off" })).toBeNull();
     expect(highlightOf(expanded, { type: "source", id: "base" })?.off).toBe(false);
@@ -160,7 +160,7 @@ describe("buildFlowModel sources and reach", () => {
   });
 
   it("reaches enabled agents from the base", () => {
-    expect(agentsReachedBy(model, "base").map(agent => agent.id)).toEqual(["codex", "cursor", "claude"]);
+    expect(agentsReachedBy(model, "base").map(agent => agent.id)).toEqual(["codex", "claude", "cursor"]);
   });
 
   it("sends your refinements only to the agents whose rules file has some, with the line count", () => {

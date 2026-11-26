@@ -53,9 +53,9 @@ describe("AppFrame", () => {
 
     it("keeps the digits where they are when agents are hidden, and ignores the digit of a hidden agent", () => {
       const onSwitchView = vi.fn<(view: AppView) => void>();
-      renderInFrame(<Panes />, { onSwitchView, enabledHarnessIds: ["codex", "cursor"] });
+      renderInFrame(<Panes />, { onSwitchView, enabledHarnessIds: ["codex", "claude"] });
       press(document.body, "4");
-      expect(onSwitchView).toHaveBeenLastCalledWith("cursor");
+      expect(onSwitchView).toHaveBeenLastCalledWith("claude");
       press(document.body, "7");
       expect(onSwitchView).toHaveBeenLastCalledWith("library");
       onSwitchView.mockClear();
@@ -73,7 +73,7 @@ describe("AppFrame", () => {
       expect(screen.queryByText(/is off in Settings/)).toBeNull();
       expect(onSwitchView).toHaveBeenLastCalledWith("opencode");
       press(document.body, "5");
-      expect(screen.getByText("Claude is off in Settings")).not.toBeNull();
+      expect(screen.getByText("Antigravity is off in Settings")).not.toBeNull();
       expect(onSwitchView).toHaveBeenCalledTimes(1);
     });
 

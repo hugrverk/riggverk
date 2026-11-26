@@ -110,16 +110,32 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.assert_fails("DEFAULT_ENABLED_HARNESS_IDS")
 
     def test_a_tab_missing_for_a_harness(self) -> None:
-        self.edit(mirror.TS_INSTALL, '"copilot", "pi", "kilo", "antigravity", "grok"];', '"copilot", "pi", "kilo", "antigravity"];')
+        self.edit(mirror.TS_INSTALL, '"cursor", "copilot", "pi", "kilo", "grok"];', '"cursor", "copilot", "pi", "kilo"];')
         self.assert_fails("HARNESS_NAV_ORDER")
 
-    def test_light_tabs_must_follow_the_central_ones(self) -> None:
+    def test_best_effort_tabs_must_follow_the_primary_ones(self) -> None:
         self.edit(
             mirror.TS_INSTALL,
-            '["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity", "grok"]',
-            '["copilot", "codex", "opencode", "cursor", "claude", "pi", "kilo", "antigravity", "grok"]',
+            '["codex", "opencode", "claude", "antigravity", "cursor", "copilot", "pi", "kilo", "grok"]',
+            '["codex", "opencode", "cursor", "claude", "antigravity", "copilot", "pi", "kilo", "grok"]',
         )
-        self.assert_fails("the light tier must follow")
+        self.assert_fails("best effort must follow primary")
+
+    def test_tabs_out_of_tier_order(self) -> None:
+        self.edit(
+            mirror.TS_INSTALL,
+            '["codex", "opencode", "claude", "antigravity", "cursor", "copilot", "pi", "kilo", "grok"]',
+            '["codex", "opencode", "claude", "antigravity", "copilot", "cursor", "pi", "kilo", "grok"]',
+        )
+        self.assert_fails("best effort must follow primary")
+
+    def test_a_harness_in_both_support_tiers(self) -> None:
+        self.edit(mirror.TS_TYPES, '["codex", "opencode", "claude", "antigravity"] as const', '["codex", "opencode", "claude", "antigravity", "cursor"] as const')
+        self.assert_fails("support tiers")
+
+    def test_a_harness_in_neither_support_tier(self) -> None:
+        self.edit(mirror.TS_TYPES, '["cursor", "copilot", "pi", "kilo", "grok"] as const', '["cursor", "copilot", "pi", "kilo"] as const')
+        self.assert_fails("support tiers")
 
     def test_a_label_missing_for_a_harness(self) -> None:
         self.edit(mirror.TS_INSTALL, '  kilo: "Kilo",\n', "")

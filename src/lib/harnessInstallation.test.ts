@@ -12,15 +12,18 @@ import {
   HARNESS_SURFACES,
   isLightAgent,
   isSurfaceEnabled,
+  supportTier,
   surfacesNeedingApply,
   TARGET_SURFACES,
   targetIdForSurface,
   type SetupTargetId,
 } from "./harnessInstallation";
 import {
+  BEST_EFFORT_AGENTS,
   CENTRAL_AGENTS,
   INSTALL_AGENTS,
   LIGHT_AGENTS,
+  PRIMARY_AGENTS,
   type AppSettings,
   type SetupPlan,
   type SetupSurfaceId,
@@ -227,12 +230,26 @@ describe("the light tier (Copilot, Pi, Kilo, Antigravity, Grok)", () => {
     expect([...LIGHT_AGENTS]).toEqual(["copilot", "pi", "kilo", "antigravity", "grok"]);
   });
 
-  it("follows Claude in the tab order, preserving the preceding tab numbers", () => {
-    expect(HARNESS_NAV_ORDER).toEqual(["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity", "grok"]);
+  it("sits in the tab order by support tier: the primary harnesses first, then the best-effort ones", () => {
+    expect(HARNESS_NAV_ORDER).toEqual(["codex", "opencode", "claude", "antigravity", "cursor", "copilot", "pi", "kilo", "grok"]);
+    expect(HARNESS_NAV_ORDER).toEqual([...PRIMARY_AGENTS, ...BEST_EFFORT_AGENTS]);
     expect([...HARNESS_NAV_ORDER].sort()).toEqual([...INSTALL_AGENTS].sort());
     expect(HARNESS_LABELS.copilot).toBe("Copilot");
     expect(HARNESS_LABELS.antigravity).toBe("Antigravity");
     expect(Object.keys(HARNESS_LABELS).sort()).toEqual([...INSTALL_AGENTS].sort());
+  });
+
+  it("has a support tier of its own, independent of central and light, that changes no default", () => {
+    expect([...PRIMARY_AGENTS]).toEqual(["codex", "opencode", "claude", "antigravity"]);
+    expect([...BEST_EFFORT_AGENTS]).toEqual(["cursor", "copilot", "pi", "kilo", "grok"]);
+    expect([...PRIMARY_AGENTS, ...BEST_EFFORT_AGENTS].sort()).toEqual([...INSTALL_AGENTS].sort());
+    for (const harness of PRIMARY_AGENTS) expect(supportTier(harness)).toBe("primary");
+    for (const harness of BEST_EFFORT_AGENTS) expect(supportTier(harness)).toBe("best_effort");
+    // Antigravity is primary but stays light and off by default; Cursor is best effort but stays central and on.
+    expect(isLightAgent("antigravity")).toBe(true);
+    expect(DEFAULT_ENABLED_HARNESS_IDS).not.toContain("antigravity");
+    expect(isLightAgent("cursor")).toBe(false);
+    expect(DEFAULT_ENABLED_HARNESS_IDS).toContain("cursor");
   });
 
   it("knows a light harness page and a light agent, and nothing else", () => {

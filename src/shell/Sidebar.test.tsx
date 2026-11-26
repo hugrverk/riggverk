@@ -16,10 +16,13 @@ function plain(props: Partial<Parameters<typeof Sidebar>[0]> = {}) {
 describe("Sidebar", () => {
   it("lists Overview, the enabled agents, History, Library and Settings in order, under section labels", () => {
     const { container } = plain();
-    expect(items(container)).toEqual(["Overview", "Codex", "OpenCode", "Cursor", "Claude", "History", "Library", "Settings"]);
-    expect(Array.from(container.querySelectorAll(".nl")).map(label => label.textContent)).toEqual(["Agents", "Workspace"]);
+    expect(items(container)).toEqual(["Overview", "Codex", "OpenCode", "Claude", "Cursor", "History", "Library", "Settings"]);
+    expect(Array.from(container.querySelectorAll(".nl")).map(label => label.textContent)).toEqual(["Agents", "Best effort", "Workspace"]);
     expect(within(screen.getByRole("group", { name: "Agents" })).getAllByRole("button").map(b => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
-      "Codex", "OpenCode", "Cursor", "Claude",
+      "Codex", "OpenCode", "Claude",
+    ]);
+    expect(within(screen.getByRole("group", { name: "Best effort agents" })).getAllByRole("button").map(b => b.getAttribute("aria-label"))).toEqual([
+      "Cursor",
     ]);
     expect(within(screen.getByRole("group", { name: "Workspace" })).getAllByRole("button").map(b => b.getAttribute("aria-label"))).toEqual([
       "History", "Library", "Settings",
@@ -27,15 +30,18 @@ describe("Sidebar", () => {
     expect(screen.getByRole("navigation", { name: "Main navigation" })).not.toBeNull();
   });
 
-  it("gives every destination its fixed digit as aria-keyshortcuts and tooltip, also with all seven agents on", () => {
-    plain({ enabledHarnessIds: ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo"] });
+  it("gives every destination its fixed digit as aria-keyshortcuts and tooltip, also with every agent on", () => {
+    const { container } = plain({ enabledHarnessIds: ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity", "grok"] });
     const digit = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-keyshortcuts");
-    expect(["Overview", "Codex", "OpenCode", "Cursor", "Claude", "History", "Library", "Settings"].map(digit)).toEqual([
+    expect(["Overview", "Codex", "OpenCode", "Claude", "Antigravity", "History", "Library", "Settings"].map(digit)).toEqual([
       "1", "2", "3", "4", "5", "6", "7", "8",
     ]);
     expect(screen.getByRole("button", { name: "Overview" }).getAttribute("title")).toBe("Overview (1)");
-    // The optional agents have no digit.
-    for (const name of ["Copilot", "Pi", "Kilo"]) {
+    expect(items(container)).toEqual([
+      "Overview", "Codex", "OpenCode", "Claude", "Antigravity", "Cursor", "Copilot", "Pi", "Kilo", "Grok", "History", "Library", "Settings",
+    ]);
+    // The best-effort agents have no digit.
+    for (const name of ["Cursor", "Copilot", "Pi", "Kilo", "Grok"]) {
       expect(digit(name)).toBeNull();
       expect(screen.getByRole("button", { name }).getAttribute("title")).toBe(name);
     }
@@ -46,6 +52,7 @@ describe("Sidebar", () => {
     const { container } = plain({ enabledHarnessIds: ["codex", "opencode", "cursor"] });
     expect(screen.queryByRole("button", { name: "Claude" })).toBeNull();
     expect(items(container)).toEqual(["Overview", "Codex", "OpenCode", "Cursor", "History", "Library", "Settings"]);
+    expect(screen.getByRole("button", { name: "Codex" }).getAttribute("aria-keyshortcuts")).toBe("2");
     expect(screen.getByRole("button", { name: "History" }).getAttribute("aria-keyshortcuts")).toBe("6");
     expect(screen.getByRole("button", { name: "Library" }).getAttribute("aria-keyshortcuts")).toBe("7");
   });
@@ -56,6 +63,7 @@ describe("Sidebar", () => {
     expect(screen.queryByText(/more agents?$/)).toBeNull();
     // No agent is listed, so the empty Agents section is not drawn either.
     expect(screen.queryByRole("group", { name: "Agents" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Best effort agents" })).toBeNull();
     expect(container.querySelectorAll(".nl")).toHaveLength(1);
   });
 

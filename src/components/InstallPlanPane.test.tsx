@@ -498,8 +498,8 @@ describe("InstallPlanPane: band, map and states", () => {
     const chips = Array.from(map().querySelectorAll(".plan-chip")).map(chip => [chip.getAttribute("data-agent"), chip.textContent]);
     expect(chips).toEqual([
       ["codex", "− 1 remove"],
-      ["cursor", "■ 1 kept"],
       ["claude", "+ 1 · ~ 1"],
+      ["cursor", "■ 1 kept"],
     ]);
     expect(map().querySelector('.plan-ln[data-agent="cursor"]')!.getAttribute("data-curve")).toBe("kept");
     // The table keeps its grid semantics and names every group in words.

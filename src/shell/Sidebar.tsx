@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { dirtyTabAriaLabel } from "../lib/editorGuards";
-import { DEFAULT_ENABLED_HARNESS_IDS } from "../lib/harnessInstallation";
+import { BEST_EFFORT_LABEL, DEFAULT_ENABLED_HARNESS_IDS, supportTier } from "../lib/harnessInstallation";
 import type { InstallAgent } from "../types";
 import { VIEW_DIGITS, visibleViews, type AppView, type ViewDef } from "./views";
 import { RuneMark } from "../ui/RuneMark";
@@ -33,7 +33,8 @@ export function formatCheckedAt(date: Date): string {
 
 /**
  * 200px text sidebar: the brand row below the macOS traffic lights (the top 52px stay clear and drag the window),
- * Overview, the enabled agents, then History / Library / Settings. Each destination has a fixed digit key
+ * Overview, the enabled primary agents, the enabled best-effort agents under their own quiet label, then History /
+ * Library / Settings. Each destination has a fixed digit key
  * (`VIEW_DIGITS`: it does not move when an agent is turned off) that shows only as `aria-keyshortcuts` and tooltip.
  * The current item draws a 2px hairline
  * (`::before`, scaleY). Markers: the count of decisions waiting per agent (read out as the item's description), a dot on Library (unsaved edits) and
@@ -55,7 +56,8 @@ export function Sidebar({
   const baseId = useId();
   const defs = visibleViews(enabledHarnessIds);
   const overview = defs.filter(def => def.id === "start");
-  const agents = defs.filter(def => def.harness !== undefined);
+  const agents = defs.filter(def => def.harness !== undefined && supportTier(def.harness) === "primary");
+  const bestEffort = defs.filter(def => def.harness !== undefined && supportTier(def.harness) === "best_effort");
   const workspace = defs.filter(def => def.id !== "start" && def.harness === undefined);
 
   const item = (def: ViewDef) => {
@@ -102,6 +104,14 @@ export function Sidebar({
             <div className="nl" aria-hidden="true">Agents</div>
             <div role="group" aria-label="Agents">
               {agents.map(item)}
+            </div>
+          </>
+        )}
+        {bestEffort.length > 0 && (
+          <>
+            <div className="nl" aria-hidden="true">{BEST_EFFORT_LABEL}</div>
+            <div role="group" aria-label={`${BEST_EFFORT_LABEL} agents`}>
+              {bestEffort.map(item)}
             </div>
           </>
         )}

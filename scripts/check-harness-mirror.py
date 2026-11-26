@@ -12,6 +12,8 @@ The app keeps one list of harnesses in several places that no compiler connects:
   TS     `CENTRAL_AGENTS`, `LIGHT_AGENTS`, `INSTALL_AGENTS` (types.ts), the surface, label and tab
          tables (harnessInstallation.ts), the rules tables (rulesView.ts), the view definitions
          (shell/views.ts), the page wiring (App.tsx)
+  TS     the support tiers `PRIMARY_AGENTS` and `BEST_EFFORT_AGENTS` (types.ts): they split
+         `INSTALL_AGENTS` exactly, and the tab order is the primary tier, then the best-effort one
 
 A harness added in one place and forgotten in another shows up as a tab that renders nothing, a
 Settings toggle that cannot be saved or a health row that never loads. This check compares them
@@ -234,12 +236,14 @@ def check_harness_ids(root: Path) -> list[str]:
         same_set(table, table, ts_record_keys(install, table, TS_INSTALL), "INSTALL_AGENTS", install_ts)
     nav = ts_array(install, "HARNESS_NAV_ORDER", TS_INSTALL)
     same_set("HARNESS_NAV_ORDER", "HARNESS_NAV_ORDER", nav, "INSTALL_AGENTS", install_ts)
-    if [name for name in nav if name in light_ts] != light_ts or any(
-        nav.index(name) < nav.index(central) for name in light_ts for central in central_ts
-    ):
+    # The support tier (primary, best effort) is a label of its own, independent of central/light.
+    primary_ts = ts_array(types, "PRIMARY_AGENTS", TS_TYPES)
+    best_effort_ts = ts_array(types, "BEST_EFFORT_AGENTS", TS_TYPES)
+    same_set("support tiers", "PRIMARY_AGENTS + BEST_EFFORT_AGENTS", primary_ts + best_effort_ts, "INSTALL_AGENTS", install_ts)
+    if nav != primary_ts + best_effort_ts:
         raise Mismatch(
-            f"HARNESS_NAV_ORDER {nav}: the light tier must follow the central harnesses, in LIGHT_AGENTS order,"
-            " so the first tabs keep their numbers"
+            f"HARNESS_NAV_ORDER {nav}: best effort must follow primary, as PRIMARY_AGENTS then BEST_EFFORT_AGENTS,"
+            " so the primary tabs keep digits 2-5"
         )
 
     views = read(TS_VIEWS)
