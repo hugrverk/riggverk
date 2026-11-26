@@ -8,6 +8,10 @@ name: Linux release build
 # the Mac, where publish signs the AppImage.
 on:
   workflow_dispatch:
+  # Rehearsal only: this branch is never merged.
+  push:
+    branches:
+      - rehearsal/ci-linux-build
 
 permissions: {}
 
@@ -101,7 +105,7 @@ jobs:
           VERSION: ${{ steps.stamp.outputs.version }}
         run: |
           set -euo pipefail
-          tag="linux-candidate-v$VERSION"
+          tag="linux-rehearsal-v$VERSION"
           if output="$(gh release view "$tag" 2>&1)"; then
             gh release delete "$tag" --yes
           elif [[ "$output" != *"release not found"* ]]; then
