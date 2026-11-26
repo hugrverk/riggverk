@@ -40,7 +40,7 @@ Fresh settings enable every target except `codex_config`, which rewrites your Co
 
 | Key | Action |
 | --- | --- |
-| `1`-`8` | Go to a page: Overview, Codex, OpenCode, Cursor, Claude, History, Library, Settings (the digits are fixed; Copilot, Pi and Kilo have none) |
+| `1`-`8` | Go to a page: Overview, Codex, OpenCode, Claude, Antigravity, History, Library, Settings (the digits are fixed; the best-effort agents Cursor, Copilot, Pi, Kilo and Grok have none) |
 | `j` `k` | Move in a list (Library) |
 | `u` | Review and apply an install or update (on the Overview: Update all) |
 | `p` | Preview only |
