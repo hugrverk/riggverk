@@ -31,6 +31,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { harnessForSurface, isLightAgent } from "../lib/harnessInstallation";
 import { ownWhen, routingLine, whenProblem } from "../views/library/routing";
 import { INSTALL_AGENTS } from "../types";
+import { version as APP_VERSION } from "../../package.json";
 import type {
   ActionResult,
   CodexConfigDefaultsPreview,
@@ -170,6 +171,8 @@ let settings: AppSettings = {
   foreground_color: colorParam("fg"),
   motion: "full",
   landing_view: "start",
+  // The update scenario checks at startup, like a user who chose "daily".
+  ...(scenario === "update" ? { update_check: "daily" as const } : {}),
   revision: 3,
 };
 
@@ -1103,6 +1106,12 @@ function setupPlan(surfaces: SetupSurfaceId[]): SetupPlan {
   };
 }
 
+/** The version `?mock=update` offers. */
+const MOCK_UPDATE_VERSION = "2026.11.7";
+
+/** The last uninstall preview, like the backend's: apply needs its fingerprint and its one-time token, and spends them. */
+let uninstallPreview: { fingerprint: string; token: string } | null = null;
+
 /** The last install preview, like the backend's: apply needs its fingerprint and its one-time token, and spends them. */
 let setupPreview: { surfaces: SetupSurfaceId[]; fingerprint: string; token: string } | null = null;
 /** What each install run changed, to put the surfaces back when it is undone. */
@@ -1949,8 +1958,7 @@ function textRevision(content: string): string {
 }
 
 /** Like the backend: a save that names the revision it loaded is refused once the file changed since. */
-function requireTextRevision(args: Args, current: string): void {
-  const expected = arg<string | null | undefined>(args, "expectedRevision");
+function requireTextRevision(expected: string | null | undefined, current: string): void {
   if (expected != null && expected !== textRevision(current)) {
     throw new Error("the file changed on disk since it was opened: reload it");
   }
@@ -2059,20 +2067,24 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
   switch (cmd) {
     // Updates are off unless `?mock=update`; the mock never downloads anything.
     case "get_app_update_info":
-      return { configured: scenario === "update", current_version: "2026.11.6" };
+      return { configured: scenario === "update", current_version: APP_VERSION };
     case "check_app_update":
       if (scenario !== "update") return { status: "skipped" };
+      // Like the backend: the automatic check at startup runs only when the settings say "daily".
+      if (arg<boolean>(args, "automatic") && settings.update_check !== "daily") return { status: "skipped" };
       await delay(300);
       return {
         status: "available",
-        version: "2026.11.7",
-        current_version: "2026.11.6",
+        version: MOCK_UPDATE_VERSION,
+        current_version: APP_VERSION,
         notes: "## New\n\n- Show the update review before anything is downloaded (#181)\n\n## Fixes\n\n- Keep the close guard in front of a restart (#182)",
         date: "2026-11-08T12:00:00Z",
         app_path: "/Applications/Riggverk.app",
         blocked: null,
       };
     case "install_app_update":
+      // Like the backend: only the version the user reviewed is installed.
+      if (arg<string>(args, "version") !== MOCK_UPDATE_VERSION) throw new Error("The version on offer is not the one you reviewed. Check for updates again.");
       await delay(600);
       throw new Error("The mock backend does not install updates.");
     case "get_settings":
@@ -2119,6 +2131,8 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return null;
     case "set_codex_config_kept":
       await delay(100);
+      // Like the backend: keeping needs the values the user reviewed.
+      if (arg<boolean>(args, "kept") && !arg<unknown[] | null | undefined>(args, "expected")) throw new Error("review the Codex config values before keeping them");
       setCodexConfigKept(arg<boolean>(args, "kept"));
       return null;
     case "preview_codex_config_defaults":
@@ -2202,19 +2216,30 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     }
     case "preview_uninstall":
       await delay(200);
+      uninstallPreview = scenario === "fresh" ? null : { fingerprint: "uninstall-fp-1", token: "uninstall-tok-1" };
       return {
         removable: [{ label: "claude rules", path: "~/.claude/CLAUDE.md" }, { label: "codex agents", path: "~/.codex/agents" }],
         preserved: [{ label: "cursor mcp", path: "~/.cursor/mcp.json" }],
         merged: [{ label: "opencode config", path: "~/.config/opencode/opencode.json" }],
         summary: "2 removable, 1 preserved, 1 merged",
-        plan_fingerprint: scenario === "fresh" ? null : "uninstall-fp-1",
-        preview_token: scenario === "fresh" ? null : "uninstall-tok-1",
+        plan_fingerprint: uninstallPreview?.fingerprint ?? null,
+        preview_token: uninstallPreview?.token ?? null,
       } satisfies UninstallPlanView;
-    case "apply_uninstall":
+    case "apply_uninstall": {
+      const fingerprint = arg<string | null>(args, "planFingerprint");
+      const token = arg<string | null>(args, "previewToken");
+      if (!fingerprint) throw new Error("Plan fingerprint required. Re-run preview before applying.");
+      if (!token) throw new Error("Preview token required. Re-run preview before applying.");
+      if (!uninstallPreview || uninstallPreview.fingerprint !== fingerprint) {
+        throw new Error("Plan fingerprint mismatch: state changed after preview. Re-run preview before applying.");
+      }
+      if (uninstallPreview.token !== token) throw new Error("Preview token expired or already used. Re-run preview before applying.");
+      uninstallPreview = null;
       await emitProgress("apply_uninstall", ["~/.claude/CLAUDE.md", "~/.codex/agents/verifier.toml", "~/.codex/agents/inspector.toml"]);
       for (const surface of ALL_SURFACES) surfaceStates.set(surface, "not_installed");
       lastTransactionId = "2026-10-06T09-00-00Z-u001";
       return { success: true, transaction_id: lastTransactionId, applied: ["~/.claude/CLAUDE.md", "~/.codex/agents"], failed: [], rolled_back: [], manual_steps: [], message: "uninstalled 2 · preserved 1 · merged 1" } satisfies SetupResult;
+    }
     case "list_backups":
       return backups;
     case "list_setup_history":
@@ -2309,7 +2334,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       requireWorkspaceForPersonalDoc(id);
       const doc = docStore.get(id);
       if (!doc) throw new Error("doc not found");
-      requireTextRevision(args, doc.content);
+      requireTextRevision(arg<string | null | undefined>(args, "expectedRevision"), doc.content);
       docStore.set(doc.id, { ...doc, content: arg<string>(args, "content") });
       return actionResult("save_doc", true, "saved with backup");
     }
@@ -2317,7 +2342,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       const slug = arg<string>(args, "slug");
       const title = arg<string>(args, "title");
       requireWorkspaceForPersonalDoc(`custom:${slug}`);
-      const doc: DocumentContent = { id: `custom:${slug}`, title, path: `docs/context/${slug}.md`, section: "Context", source: "custom", content: `# ${title}\n` };
+      const doc: DocumentContent = { id: `custom:${slug}`, title, path: `docs/context/${slug}.md`, section: "Context", source: "custom", content: arg<string | null | undefined>(args, "content") ?? (title ? `# ${title}\n` : "") };
       if (docStore.has(doc.id)) throw new Error(`doc already exists: ${doc.id}`);
       docStore.set(doc.id, doc);
       return doc;
@@ -2759,7 +2784,7 @@ async function handlePersonalPackWrites(cmd: string, args: Args): Promise<unknow
     if (pack?.state !== "ok" || !skill) throw new Error("personal skill does not exist or is not active");
     checkPersonalSkillText(content, name);
     const previous = personalPackDocuments.get(id);
-    if (previous) requireTextRevision(args, previous.content);
+    if (previous) requireTextRevision(arg<string | null | undefined>(args, "expectedRevision"), previous.content);
     personalPackDocuments.set(id, { id, title: name, path: skill.path, section: "pack:personal", source: "pack", content });
     return actionResult("save_pack_skill", true, previous?.content === content ? "unchanged" : "saved with backup");
   }

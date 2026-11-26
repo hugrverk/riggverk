@@ -140,6 +140,9 @@ python3 scripts/validate_opencode_permissions.py
 step "harness ids agree across Rust, TypeScript and the light descriptor"
 python3 scripts/check-harness-mirror.py
 
+step "mock backend agrees with the Rust commands"
+python3 scripts/check-mock-parity.py
+
 step "managed installation contract"
 python3 scripts/check-managed-installation-contract.py
 
