@@ -189,7 +189,7 @@ A new `scripts/check-*.py`, `validate_*.py` or `smoke-*.sh` must be called from 
 
 ## Release flow
 
-`./scripts/release.sh prepare` computes the CalVer version, drafts the notes, bumps the versions, runs the gate and opens the release pull request; edit `release-notes/<version>.md` and run `python3 scripts/generate.py write --only release-notes`; merge; `./scripts/release.sh publish` builds, signs, zips and creates the GitHub release. Details and rollback: [RELEASE.md](./RELEASE.md). The local gate is authoritative; GitHub Actions also runs the checks on pull requests and on main, Windows included (`windows-checks.yml`), but builds no release.
+`./scripts/release.sh prepare` computes the CalVer version, drafts the notes, bumps the versions, runs the gate and opens the release pull request; edit `release-notes/<version>.md` and run `python3 scripts/generate.py write --only release-notes`; merge; `./scripts/release.sh publish` builds, signs, zips and creates the GitHub release. Details and rollback: [RELEASE.md](./RELEASE.md). The local gate is authoritative; GitHub Actions also runs the checks on pull requests and on main, Windows included (`windows-checks.yml`), and builds only the Linux packages of a release, when asked (`linux-release-build.yml`).
 
 ## Common failures
 

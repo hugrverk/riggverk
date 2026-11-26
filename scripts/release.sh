@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Local release flow (no CI). See docs/RELEASE.md.
+# Local release flow; CI only builds the Linux packages. See docs/RELEASE.md.
 #
 #   scripts/release.sh prepare [--dry-run] [--since REV]   next CalVer version, notes draft, bump, release check, PR
 #   scripts/release.sh build-linux [--dry-run] [--allow-newer] [--key FILE]
 #                                                          on Linux: AppImage, deb and rpm of main into release/linux,
 #                                                          their stamp signed with an SSH key in scripts/linux-build-signers,
 #                                                          uploaded as the draft build candidate linux-candidate-v<version>
+#   scripts/release.sh build-linux --ci DIR                for .github/workflows/linux-release-build.yml: the same build,
+#                                                          named and stamped into DIR; the workflow attests and uploads it
 #   scripts/release.sh publish [--dry-run] [--allow-newer] [--no-linux]
 #                                                          on macOS: universal build, dmg, zip, the Linux packages from
 #                                                          release/linux or the build candidate, SHA256SUMS, tag and
@@ -45,6 +47,9 @@ linux=0
 # reviewed PR. The namespace keeps these signatures apart from anything else signed with the same key.
 linux_signers="scripts/linux-build-signers"
 linux_namespace="riggverk-linux-build"
+# The workflow that builds the packages in CI. Without a signed stamp, publish accepts packages only with a GitHub
+# artifact attestation from this workflow, run at the commit being released.
+linux_workflow=".github/workflows/linux-release-build.yml"
 
 step() {
   printf '\n==> %s\n' "$1"
@@ -64,6 +69,7 @@ usage() {
 usage:
   scripts/release.sh prepare [--dry-run] [--since REV]
   scripts/release.sh build-linux [--dry-run] [--allow-newer] [--key FILE]
+  scripts/release.sh build-linux --ci DIR
   scripts/release.sh publish [--dry-run] [--allow-newer] [--no-linux]
 USAGE
 }
@@ -681,14 +687,31 @@ linux_stamp_signer() {
   printf '%s\n' "$principal"
 }
 
-# The five files build-linux leaves in release/linux and uploads as the build candidate, into linux_names.
+# Succeeds when each package in the folder $1 has a GitHub artifact attestation from $linux_workflow of this
+# repository, run on a GitHub-hosted runner at HEAD. The workflow and the commit are read from the signing
+# certificate, which a workflow cannot set itself, so packages built by another workflow, from another commit or
+# changed after the build fail here.
+linux_packages_attested() {
+  local dir="$1" repo commit name
+  repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" && [ -n "$repo" ] || return 1
+  commit="$(git rev-parse HEAD)"
+  set_linux_names
+  for name in "${linux_names[@]:0:3}"; do
+    gh attestation verify "$dir/$name" --repo "$repo" --signer-workflow "$repo/$linux_workflow" \
+      --source-digest "$commit" --deny-self-hosted-runners >/dev/null 2>&1 || return 1
+  done
+}
+
+# The files of a Linux build, into linux_names: the three packages and their stamp, then the stamp's SSH signature,
+# which only a build-linux run on a maintainer's machine adds (a CI build is attested instead).
 set_linux_names() {
   linux_names=("Riggverk-v$version-linux-x86_64.AppImage" "Riggverk-v$version-linux-amd64.deb"
     "Riggverk-v$version-linux-x86_64.rpm" linux-build.json linux-build.json.sig)
 }
 
-# Downloads the five files of the build candidate into $1. The candidate needs no trust of its own: the checks after
-# this are the ones a hand-copied release/linux gets. Returns 1 when there is nothing to check.
+# Downloads the files of the build candidate (set_linux_names; nothing else it holds) into $1. The candidate needs no
+# trust of its own: the checks after this are the ones a hand-copied release/linux gets. Returns 1 when there is
+# nothing to check.
 fetch_linux_candidate() {
   local dir="$1" tag="linux-candidate-v$version" name patterns=()
   if ! github_release_exists "$tag"; then
@@ -713,9 +736,11 @@ discard_linux_candidate() {
   rmdir release 2>/dev/null || true
 }
 
-# The Linux packages build-linux left in release/linux, or in the build candidate when release/linux is missing: of this
-# version, built from HEAD, unchanged, and signed by a key in $linux_signers. A candidate that passes becomes
-# release/linux (a dry run only reports it); one that fails is removed again, so a rebuilt candidate is not shadowed.
+# The Linux packages in release/linux, or in the build candidate when release/linux is missing: of this version, built
+# from HEAD, unchanged, and either stamped with a signature from a key in $linux_signers (build-linux on a
+# maintainer's machine) or attested by $linux_workflow (the CI build). A stamp signature that is there must verify:
+# an attestation does not rescue a bad one. A candidate that passes becomes release/linux (a dry run only reports
+# it); one that fails is removed again, so a rebuilt candidate is not shadowed.
 # --no-linux releases macOS alone; installed Linux apps then fail their update check ("Could not check for a new
 # version") until the next release with Linux packages, since its latest.json has no linux-x86_64 entry.
 check_linux() {
@@ -724,12 +749,12 @@ check_linux() {
     info "Linux: skipped (--no-linux)"
     return 0
   fi
-  local signer dir="$linux_dir" candidate="" rebuild
-  rebuild="run ./scripts/release.sh build-linux on Linux and remove $linux_dir here to take its build candidate, copy its $linux_dir here, or --no-linux"
+  local signer="" dir="$linux_dir" candidate="" rebuild
+  rebuild="build them again (the workflow $linux_workflow, or ./scripts/release.sh build-linux on Linux) and remove $linux_dir here to take the build candidate, copy a build's $linux_dir here, or --no-linux"
   if [ ! -e "$linux_dir" ]; then
     candidate="linux-candidate-v$version"
     dir="release/linux-candidate"
-    rebuild="run ./scripts/release.sh build-linux again on this commit, or --no-linux"
+    rebuild="run the workflow $linux_workflow or ./scripts/release.sh build-linux again on this commit, or --no-linux"
     fetch_linux_candidate "$dir" || return 0
   fi
   if ! python3 scripts/release_tools.py linux-stamp check --dir "$dir" --version "$version" --commit "$(git rev-parse HEAD)"; then
@@ -737,14 +762,24 @@ check_linux() {
     problem "no Linux packages of this commit in ${candidate:-$linux_dir} ($rebuild)"
     return 0
   fi
-  if ! signer="$(linux_stamp_signer "$dir")"; then
+  if [ -e "$dir/linux-build.json.sig" ]; then
+    if ! signer="$(linux_stamp_signer "$dir")"; then
+      [ -z "$candidate" ] || discard_linux_candidate "$dir"
+      problem "${candidate:-$linux_dir}: linux-build.json has no valid signature from a key in $linux_signers (build-linux signs it; do not publish packages that were changed or replaced on the way)"
+      return 0
+    fi
+  elif ! linux_packages_attested "$dir"; then
     [ -z "$candidate" ] || discard_linux_candidate "$dir"
-    problem "${candidate:-$linux_dir}: linux-build.json has no valid signature from a key in $linux_signers (build-linux signs it; do not publish packages that were changed or replaced on the way)"
+    problem "${candidate:-$linux_dir}: the packages have no attestation from $linux_workflow for this commit (gh attestation verify) and linux-build.json has no signature; do not publish packages that were changed or replaced on the way"
     return 0
   fi
   linux=1
   info "checked: ${candidate:-$linux_dir} holds the AppImage, deb and rpm of $version, built from HEAD"
-  info "checked: its linux-build.json is signed by $signer ($linux_signers)"
+  if [ -n "$signer" ]; then
+    info "checked: its linux-build.json is signed by $signer ($linux_signers)"
+  else
+    info "checked: its packages are attested by $linux_workflow, run at HEAD"
+  fi
   [ -n "$candidate" ] || return 0
   if [ "$dry_run" -eq 1 ]; then
     discard_linux_candidate "$dir"
@@ -895,15 +930,56 @@ upload_linux_candidate() {
   info "uploaded $tag (draft prerelease of $commit)"
 }
 
+# The three packages of scripts/linux-build.sh in $1 under their release names in $2, with the stamp of commit $3.
+stage_linux_packages() {
+  local build_dir="$1" staging="$2" commit="$3"
+  mkdir -p "$staging"
+  cp "$build_dir/Riggverk_${version}_amd64.AppImage" "$staging/Riggverk-v$version-linux-x86_64.AppImage"
+  cp "$build_dir/Riggverk_${version}_amd64.deb" "$staging/Riggverk-v$version-linux-amd64.deb"
+  cp "$build_dir/Riggverk-${version}-1.x86_64.rpm" "$staging/Riggverk-v$version-linux-x86_64.rpm"
+  python3 scripts/release_tools.py linux-stamp write --dir "$staging" --version "$version" --commit "$commit"
+}
+
+# For $linux_workflow: the container build of HEAD, named and stamped into the new or empty folder $1. It needs no
+# gh, no SSH key and no secret, and it signs and uploads nothing: the workflow attests the packages and uploads the
+# candidate in a job of its own. Whether HEAD is a release is publish's check, not this one's.
+build_linux_for_ci() {
+  local out="$1" commit
+  step "preflight"
+  [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ] || fail "build-linux runs on a Linux x86_64 host"
+  require_python
+  require_tools git podman
+  [ -z "$(ls -A "$out" 2>/dev/null)" ] || fail "$out is not empty; pass a new or empty directory to --ci"
+  version="$(python3 scripts/release_tools.py check-versions)" || fail "the app version is inconsistent (see above)"
+  info "app version: $version"
+  commit="$(git rev-parse HEAD)"
+
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/riggverk-release.XXXXXX")"
+  trap cleanup_build_linux EXIT
+  trap 'exit 130' INT TERM
+
+  step "build"
+  scripts/linux-build.sh --out "$tmp_dir/build"
+
+  step "release files"
+  stage_linux_packages "$tmp_dir/build" "$out" "$commit"
+  ls -l "$out" | sed '1d; s/^/  /'
+}
+
 # Runs on the Linux machine at the commit publish will release: the same checks as publish, then the container build
 # (scripts/linux-build.sh), the release names and stamp in release/linux, and the upload of that folder as the build
 # candidate. Nothing is tagged or released here.
 cmd_build_linux() {
-  local allow_newer=0 commit build_dir staging key="$HOME/.ssh/id_ed25519" public signer
+  local allow_newer=0 commit build_dir staging key="$HOME/.ssh/id_ed25519" public signer ci_out=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --dry-run) dry_run=1 ;;
       --allow-newer) allow_newer=1 ;;
+      --ci)
+        [ $# -ge 2 ] && [ -n "$2" ] || fail "--ci needs the directory to leave the packages in"
+        ci_out="$2"
+        shift
+        ;;
       --key)
         [ $# -ge 2 ] && [ -n "$2" ] || fail "--key needs the SSH key file to sign with"
         key="$2"
@@ -913,6 +989,11 @@ cmd_build_linux() {
     esac
     shift
   done
+  if [ -n "$ci_out" ]; then
+    [ "$dry_run" -eq 0 ] || fail "--ci has no dry run"
+    build_linux_for_ci "$ci_out"
+    return
+  fi
 
   step "preflight"
   [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ] || problem "build-linux runs on a Linux x86_64 host"
@@ -963,11 +1044,7 @@ cmd_build_linux() {
   # cancelled signing keeps the build that was there.
   step "release files"
   staging="$tmp_dir/linux"
-  mkdir -p "$staging"
-  cp "$build_dir/Riggverk_${version}_amd64.AppImage" "$staging/Riggverk-v$version-linux-x86_64.AppImage"
-  cp "$build_dir/Riggverk_${version}_amd64.deb" "$staging/Riggverk-v$version-linux-amd64.deb"
-  cp "$build_dir/Riggverk-${version}-1.x86_64.rpm" "$staging/Riggverk-v$version-linux-x86_64.rpm"
-  python3 scripts/release_tools.py linux-stamp write --dir "$staging" --version "$version" --commit "$commit"
+  stage_linux_packages "$build_dir" "$staging" "$commit"
 
   step "sign"
   ssh-keygen -Y sign -q -f "$key" -n "$linux_namespace" "$staging/linux-build.json"

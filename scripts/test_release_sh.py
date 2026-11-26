@@ -9,6 +9,7 @@ built, pushed, uploaded or read from the Keychain. A dry run must also leave the
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -38,13 +39,33 @@ VERSION_LINES = (
     ("package-lock.json", r'("name": "riggverk",\s*"version": ")[^"]*(")', 2),
     ("src-tauri/Cargo.lock", r'(name = "riggverk"\nversion = ")[^"]*(")', 1),
 )
-# GitHub releases are folders in $GH_STUB_RELEASES, one per tag, holding the uploaded files.
+# GitHub releases are folders in $GH_STUB_RELEASES, one per tag, holding the uploaded files. Attestations are lines
+# "<sha256 of the file> <commit the workflow ran at>" in $GH_STUB_ATTESTATIONS, all from the release build workflow.
 GH_STUB = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >>"$GH_STUB_LOG"
 [ -z "${TAURI_SIGNING_PRIVATE_KEY+set}${TAURI_SIGNING_PRIVATE_KEY_PASSWORD+set}" ] || echo "gh saw the signing key" >>"$GH_STUB_LOG"
 release="$GH_STUB_RELEASES/${3:-}"
 case "$1 $2" in
   "auth status") exit 0 ;;
+  "repo view") echo "o/riggverk" ;;
+  "attestation verify")
+    file="$3"
+    shift 3
+    repo="" workflow="" digest="" hosted=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --repo) repo="$2"; shift ;;
+        --signer-workflow) workflow="$2"; shift ;;
+        --source-digest) digest="$2"; shift ;;
+        --deny-self-hosted-runners) hosted=1 ;;
+      esac
+      shift
+    done
+    [ "$repo" = "o/riggverk" ] && [ -n "$hosted" ] || exit 1
+    [ "$workflow" = "o/riggverk/.github/workflows/linux-release-build.yml" ] || exit 1
+    sum="$(shasum -a 256 "$file" | cut -d' ' -f1)"
+    grep -qxF "$sum $digest" "$GH_STUB_ATTESTATIONS" 2>/dev/null || exit 1
+    ;;
   "release view")
     if [ -n "${GH_STUB_RELEASE_EXISTS:-}" ] || [ -d "$release" ]; then echo "tag: $3"; exit 0; fi
     echo "release not found" >&2
@@ -134,6 +155,7 @@ class ReleaseShTests(unittest.TestCase):
         self.gh_log = base / "gh.log"
         self.gh_releases = base / "releases"
         self.gh_releases.mkdir()
+        self.gh_attestations = base / "attestations"
         bin_dir = base / "bin"
         bin_dir.mkdir()
         for name in ("cargo", "codesign", "ditto", "hdiutil", "lipo", "podman"):
@@ -159,6 +181,7 @@ class ReleaseShTests(unittest.TestCase):
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "GH_STUB_LOG": str(self.gh_log),
             "GH_STUB_RELEASES": str(self.gh_releases),
+            "GH_STUB_ATTESTATIONS": str(self.gh_attestations),
             "SECURITY_STUB_LOG": str(self.security_log),
             "NPM_STUB_LOG": str(self.npm_log),
             "LINUX_BUILD_STUB_LOG": str(self.linux_build_log),
@@ -749,10 +772,13 @@ class ReleaseShTests(unittest.TestCase):
         Path(f"{stamp}.sig").write_bytes(signature)
         replaced = self.release("publish", "--dry-run")
 
-        for result in (outsider, unsigned, replaced):
+        for result in (outsider, replaced):
             self.assertEqual(result.returncode, 1)
             self.assertIn("no valid signature from a key in scripts/linux-build-signers", result.stderr)
             self.assertNotIn("is signed by", result.stdout)
+        self.assertEqual(unsigned.returncode, 1)
+        self.assertIn("no attestation from .github/workflows/linux-release-build.yml for this commit", unsigned.stderr)
+        self.assertNotIn("are attested by", unsigned.stdout)
 
     # The build candidate on GitHub
 
@@ -850,7 +876,11 @@ class ReleaseShTests(unittest.TestCase):
 
         self.assertEqual(other_commit.returncode, 1)
         self.assertIn("were built from", other_commit.stderr)
-        self.assertIn("run ./scripts/release.sh build-linux again on this commit", other_commit.stderr)
+        self.assertIn(
+            "run the workflow .github/workflows/linux-release-build.yml or ./scripts/release.sh build-linux again on this "
+            "commit",
+            other_commit.stderr,
+        )
         for result in (replaced, replaced_real):
             self.assertEqual(result.returncode, 1)
             self.assertIn("no valid signature from a key in scripts/linux-build-signers", result.stderr)
@@ -871,6 +901,118 @@ class ReleaseShTests(unittest.TestCase):
         self.assertIn("checked: release/linux holds the AppImage", result.stdout)
         self.assertNotIn("release download", self.gh_calls())
         self.assertNotIn("downloaded the build candidate", result.stdout)
+
+    # The CI build: no SSH signature, an attestation instead
+
+    def upload_ci_candidate(self, attested_at: str = "HEAD") -> Path:
+        """What the release build workflow uploads: the packages and their stamp, attested at `attested_at`."""
+        candidate = self.upload_candidate()
+        (candidate / "linux-build.json.sig").unlink()
+        commit = self.git("rev-parse", attested_at).strip()
+        self.gh_attestations.write_text(
+            "".join(
+                f"{hashlib.sha256(path.read_bytes()).hexdigest()} {commit}\n"
+                for path in sorted(candidate.iterdir())
+                if path.name != "linux-build.json"
+            )
+        )
+        return candidate
+
+    def test_build_linux_for_ci_stamps_the_packages_and_signs_and_uploads_nothing(self) -> None:
+        self.linux_packages = False
+        self.merge_release_pr(NEXT)
+        out = Path(self._tmp.name) / "ci-out"
+
+        # The workflow checks out a detached commit and has neither gh nor an SSH key.
+        self.git("switch", "-q", "--detach")
+        result = self.release("build-linux", "--ci", str(out), HOME=str(Path(self._tmp.name) / "no-home"))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            sorted(path.name for path in out.iterdir()),
+            sorted(
+                [
+                    f"Riggverk-v{NEXT}-linux-amd64.deb",
+                    f"Riggverk-v{NEXT}-linux-x86_64.AppImage",
+                    f"Riggverk-v{NEXT}-linux-x86_64.rpm",
+                    "linux-build.json",
+                ]
+            ),
+        )
+        stamp = json.loads((out / "linux-build.json").read_text())
+        self.assertEqual((stamp["version"], stamp["commit"]), (NEXT, self.git("rev-parse", "HEAD").strip()))
+        self.assertFalse(self.gh_log.exists())
+        self.assertFalse((self.repo / "release").exists())
+
+    def test_build_linux_for_ci_refuses_a_folder_that_holds_something(self) -> None:
+        self.merge_release_pr(NEXT)
+        out = Path(self._tmp.name) / "ci-out"
+        out.mkdir()
+        (out / "left-over").write_text("from an earlier step\n")
+
+        result = self.release("build-linux", "--ci", str(out))
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("is not empty", result.stderr)
+        self.assertFalse(self.linux_build_log.exists())
+
+    def test_publish_takes_an_attested_candidate_that_has_no_signature(self) -> None:
+        self.linux_packages = False
+        self.merge_release_pr(NEXT)
+        self.upload_ci_candidate()
+        commit = self.git("rev-parse", "HEAD").strip()
+
+        result = self.release("publish", "--dry-run")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"downloaded the build candidate linux-candidate-v{NEXT}", result.stdout)
+        self.assertIn("its packages are attested by .github/workflows/linux-release-build.yml, run at HEAD", result.stdout)
+        self.assertNotIn("is signed by", result.stdout)
+        calls = self.gh_calls()
+        self.assertEqual(calls.count("attestation verify"), 3)
+        self.assertIn(
+            "--repo o/riggverk --signer-workflow o/riggverk/.github/workflows/linux-release-build.yml "
+            f"--source-digest {commit} --deny-self-hosted-runners",
+            calls,
+        )
+
+    def test_publish_refuses_an_unsigned_candidate_attested_at_another_commit_or_changed_since(self) -> None:
+        self.linux_packages = False
+        self.merge_release_pr(NEXT)
+
+        # Built by the workflow, but at the commit before: the stamp was rewritten to name HEAD.
+        self.upload_ci_candidate(attested_at="HEAD^")
+        other_commit = self.release("publish", "--dry-run")
+        shutil.rmtree(self.gh_releases / f"linux-candidate-v{NEXT}")
+        # Replaced after the build: a new deb and a stamp rewritten to match it.
+        candidate = self.upload_ci_candidate()
+        (candidate / f"Riggverk-v{NEXT}-linux-amd64.deb").write_text("replaced\n")
+        self.python(
+            "scripts/release_tools.py", "linux-stamp", "write", "--dir", str(candidate), "--version", NEXT,
+            "--commit", self.git("rev-parse", "HEAD").strip(),
+        )
+        replaced = self.release("publish", "--dry-run")
+        replaced_real = self.release("publish")
+
+        for result in (other_commit, replaced, replaced_real):
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("no attestation from .github/workflows/linux-release-build.yml for this commit", result.stderr)
+            self.assertNotIn("are attested by", result.stdout)
+        self.assertFalse((self.repo / "release/linux").exists())
+        self.assertFalse((self.repo / "release/linux-candidate").exists())
+        self.assertFalse(self.npm_log.exists())
+
+    def test_an_attestation_does_not_rescue_a_stamp_signature_that_fails(self) -> None:
+        self.linux_packages = False
+        self.merge_release_pr(NEXT)
+        candidate = self.upload_ci_candidate()
+        (candidate / "linux-build.json.sig").write_text("not a signature\n")
+
+        result = self.release("publish", "--dry-run")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("no valid signature from a key in scripts/linux-build-signers", result.stderr)
+        self.assertNotIn("attestation verify", self.gh_calls())
 
     def test_build_linux_refuses_a_key_publish_would_not_accept(self) -> None:
         self.merge_release_pr(NEXT)
