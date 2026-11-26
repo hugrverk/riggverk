@@ -60,3 +60,9 @@ jobs:
 
       - name: Rust tests
         run: cargo nextest run --locked --manifest-path src-tauri/Cargo.toml --no-fail-fast
+
+      # The headless install smoke: preview and apply through the command handlers in a temporary
+      # HOME. The script converts its paths with cygpath, so it runs under Git Bash.
+      - name: Runtime smoke
+        shell: bash
+        run: bash scripts/smoke-tauri-runtime.sh
