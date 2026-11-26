@@ -215,6 +215,19 @@ describe("SettingsView radio groups", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Antigravity" }));
     expect(props.onToggleHarness).toHaveBeenCalledWith("antigravity");
   });
+
+  it("tags the best-effort agents beside their names, and keeps each switch named by the agent alone", () => {
+    renderSettings();
+    const list = document.querySelector<HTMLElement>('dl[aria-label="Enabled agents"]')!;
+    const tagged = Array.from(list.querySelectorAll("dt"))
+      .filter(dt => dt.querySelector(".lib-tag")?.textContent === "Best effort")
+      .map(dt => dt.querySelector("span[id]")!.textContent);
+    expect(tagged).toEqual(["Cursor", "Copilot", "Pi", "Kilo", "Grok"]);
+    for (const name of ["Codex", "OpenCode", "Claude", "Antigravity"]) {
+      expect(screen.getByRole("switch", { name }).closest(".srow")!.querySelector(".lib-tag")).toBeNull();
+    }
+    expect(screen.getByRole("switch", { name: "Cursor" })).toBeTruthy();
+  });
 });
 
 describe("SettingsView motion control", () => {

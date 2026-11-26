@@ -155,6 +155,8 @@ describe("HarnessPage", () => {
     expect(page.querySelector(".hp-sub")!.textContent).toBe("~/.codex · approval on-request · sandbox workspace-write");
     expect(page.querySelector(".hp-grid")).not.toBeNull();
     expect(screen.queryByRole("region", { name: "Run" })).toBeNull();
+    // Codex is a primary harness: no support-tier tag.
+    expect(page.querySelector(".hp-tier")).toBeNull();
   });
 
   it("is the page-level focus container: it takes focus on click, so the page keys keep working", () => {
