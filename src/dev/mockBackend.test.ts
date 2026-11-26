@@ -554,6 +554,8 @@ describe("mock backend: keep mine for the Codex config", () => {
     (await invoke<InstallationStatus>("get_installation_status", { surfaces: ["codex_config"] })).surfaces.find(row => row.surface === "codex_config")!;
   const health = () => invoke<{ config_status: string; config_kept: string[] }>("get_codex_runtime_health");
 
+  const reviewed = [{ key: "approvals_reviewer", value: "auto_review" }];
+
   it("shows the owner's conflict, keeps the key the way the app does, and hands it back", async () => {
     const { settings } = await invoke<{ settings: { enabled_target_ids: string[] } }>("get_settings");
     expect(settings.enabled_target_ids).toContain("codex_config");
@@ -565,14 +567,15 @@ describe("mock backend: keep mine for the Codex config", () => {
     expect((await configRow()).detail).toContain("m keeps your value");
     expect(await health()).toMatchObject({ config_status: "diverged", config_kept: [] });
 
-    await invoke("set_codex_config_kept", { kept: true });
+    await expect(invoke("set_codex_config_kept", { kept: true })).rejects.toThrow("review the Codex config values");
+    await invoke("set_codex_config_kept", { kept: true, expected: reviewed });
     expect(await configRow()).toMatchObject({
       state: "current",
       detail: "you keep approvals_reviewer = auto_review; other managed keys follow Riggverk",
       codex_config: { kept: [{ key: "approvals_reviewer", value: "auto_review" }], differing: [] },
     });
     expect(await health()).toMatchObject({ config_kept: ["approvals_reviewer"] });
-    await expect(invoke("set_codex_config_kept", { kept: true })).rejects.toThrow("nothing to keep");
+    await expect(invoke("set_codex_config_kept", { kept: true, expected: reviewed })).rejects.toThrow("nothing to keep");
 
     await invoke("set_codex_config_kept", { kept: false });
     expect(await configRow()).toMatchObject({ state: "conflict", codex_config: { kept: [] } });
