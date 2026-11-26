@@ -138,6 +138,22 @@ describe("LightHarnessView", () => {
     expect(within(page).getByRole("heading", { name: label })).toBeTruthy();
   });
 
+  it.each(LIGHT_AGENTS)("tags the %s page with its support tier in words, beside the name and outside the heading", harness => {
+    renderLight(harness, null);
+    const page = detail(LABELS[harness]);
+    const tier = page.querySelector(".hp-tier");
+    if (harness === "antigravity") {
+      expect(tier).toBeNull();
+      expect(within(page).queryByText(/Best effort/)).toBeNull();
+      return;
+    }
+    expect(tier!.textContent).toBe(
+      "Best effort: Riggverk supports this agent, but checks new versions of it later than those of the primary agents.",
+    );
+    expect(tier!.querySelector(".lib-tag")!.textContent).toBe("Best effort:");
+    expect(within(page).getByRole("heading", { name: LABELS[harness] })).toBeTruthy();
+  });
+
   it("renders the Grok page with a skills cell and an MCP cell that starts off, and says where its rules come from", () => {
     const grokHealth = (rules: LightRuntimeHealth["rules"]) =>
       health({

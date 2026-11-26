@@ -3,6 +3,7 @@
 
      .hp                       the page; .hp-page is the page (data-pane-id="page", ui/Page.tsx), scrolls on its own
      .hp-head                  the name (.hp-title, an h4), the mono line under it (.hp-sub), Preview / Update (.hp-head-actions)
+     .hp-tier                  a best-effort harness: its tag (.lib-tag) and one muted sentence under the name
      .hp-grid > .hp-cell       joined 1px hairline grid, radius 0; .hp-span3 takes the whole row
        [data-state="decide"]   a decision: the bright top edge (a top inset, never a side bar)
        .hp-lbl / .hp-ch        mono label; the bold line with the state pill
@@ -81,6 +82,14 @@
 }
 
 .hp-sub:empty { display: none; }
+
+/* A best-effort harness: the tag (.lib-tag) and one muted sentence, between the name and the mono line. */
+.hp-tier {
+  margin: 6px 0 0;
+  max-width: 72ch;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
 
 .hp-head-actions {
   display: flex;

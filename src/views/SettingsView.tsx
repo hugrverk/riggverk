@@ -11,7 +11,7 @@ import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { isSettingsConflictError } from "../lib/appSettingsMutation";
 import { displayPath } from "../lib/displayPath";
-import { HARNESS_LABELS } from "../lib/harnessInstallation";
+import { BEST_EFFORT_LABEL, HARNESS_LABELS, HARNESS_NAV_ORDER, supportTier } from "../lib/harnessInstallation";
 import { useSystemReducedMotion } from "../lib/motion";
 import {
   APP_FONT_SIZE_LABELS,
@@ -26,7 +26,7 @@ import {
 } from "../lib/settingsDraft";
 import type { AppUpdate } from "../hooks/useAppUpdate";
 import type { AppSettings, UpdateCheckChoice } from "../types";
-import { INSTALL_AGENTS, type InstallAgent } from "../types";
+import type { InstallAgent } from "../types";
 import { BindingButton } from "../ui/BindingButton";
 import { Pane } from "../ui/Pane";
 import { Switch } from "../ui/Switch";
@@ -123,11 +123,14 @@ function SettingRows({ label, children }: { label: string; children: ReactNode }
 function SettingRow({
   labelId,
   label,
+  tag,
   stacked = false,
   children,
 }: {
   labelId: string;
   label: string;
+  /** A quiet tag after the label (an agent's "Best effort"); not part of the label's id text. */
+  tag?: string;
   /** Control under the label instead of beside it (a path, a status). */
   stacked?: boolean;
   children: ReactNode;
@@ -136,6 +139,12 @@ function SettingRow({
     <div className={cx("srow", stacked && "srow-stack")}>
       <dt className="sl">
         <span id={labelId}>{label}</span>
+        {tag && (
+          <>
+            {" "}
+            <span className="lib-tag">{tag}</span>
+          </>
+        )}
       </dt>
       <dd className="sc">{children}</dd>
     </div>
@@ -678,10 +687,15 @@ export function SettingsView({
         )}
         <h3 className="sgroup">Agents</h3>
         <SettingRows label="Enabled agents">
-          {INSTALL_AGENTS.map(harness => {
+          {HARNESS_NAV_ORDER.map(harness => {
             const enabled = appSettings.enabled_harness_ids.includes(harness);
             return (
-              <SettingRow key={harness} labelId={labelId(`harness-${harness}`)} label={HARNESS_LABELS[harness]}>
+              <SettingRow
+                key={harness}
+                labelId={labelId(`harness-${harness}`)}
+                label={HARNESS_LABELS[harness]}
+                tag={supportTier(harness) === "best_effort" ? BEST_EFFORT_LABEL : undefined}
+              >
                 <div className="setting-switch" data-setting-row="">
                   <Switch label={HARNESS_LABELS[harness]} checked={enabled} onChange={() => onToggleHarness(harness)} />
                   <span className="sw-state" aria-hidden="true">

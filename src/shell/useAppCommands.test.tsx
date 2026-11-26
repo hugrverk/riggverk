@@ -329,7 +329,7 @@ describe("useAppCommands", () => {
       );
       const bare = parseCommandLine("update", registered);
       expect(bare).toMatchObject({ ok: false });
-      expect(bare.ok ? "" : bare.error).toBe("update: name a target (workspace | codex | opencode | cursor | claude) or pass --all");
+      expect(bare.ok ? "" : bare.error).toBe("update: name a target (workspace | codex | opencode | claude | cursor) or pass --all");
       fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
       fireEvent.change(screen.getByRole("combobox", { name: "Command" }), { target: { value: "update codex --all" } });
       fireEvent.keyDown(screen.getByRole("combobox", { name: "Command" }), { key: "Enter" });

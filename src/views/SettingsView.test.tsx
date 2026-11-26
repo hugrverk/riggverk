@@ -199,21 +199,34 @@ describe("SettingsView radio groups", () => {
     expect(props.onToggleHarness).toHaveBeenCalledWith("cursor");
   });
 
-  it("offers Copilot, Pi, Kilo and Antigravity after the four central harnesses, off by default", () => {
+  it("lists the primary agents before the best-effort ones, the optional ones off by default", () => {
     const { props } = renderSettings();
-    const harnesses = ["Codex", "OpenCode", "Claude", "Cursor", "Copilot", "Pi", "Kilo", "Antigravity"];
+    const harnesses = ["Codex", "OpenCode", "Antigravity", "Claude", "Cursor", "Copilot", "Pi", "Kilo"];
     const boxes = harnesses.map(name => screen.getByRole("switch", { name }));
     boxes.slice(1).forEach((box, index) => {
       expect(boxes[index]!.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
     expect(boxes.map(box => box.getAttribute("aria-checked"))).toEqual(
-      ["true", "true", "true", "true", "false", "false", "false", "false"],
+      ["true", "true", "false", "true", "true", "false", "false", "false"],
     );
-    for (const box of boxes.slice(4)) expect(box.nextElementSibling!.textContent).toBe("Off");
+    for (const box of boxes.slice(5)) expect(box.nextElementSibling!.textContent).toBe("Off");
     fireEvent.click(screen.getByRole("switch", { name: "Pi" }));
     expect(props.onToggleHarness).toHaveBeenCalledWith("pi");
     fireEvent.click(screen.getByRole("switch", { name: "Antigravity" }));
     expect(props.onToggleHarness).toHaveBeenCalledWith("antigravity");
+  });
+
+  it("tags the best-effort agents beside their names, and keeps each switch named by the agent alone", () => {
+    renderSettings();
+    const list = document.querySelector<HTMLElement>('dl[aria-label="Enabled agents"]')!;
+    const tagged = Array.from(list.querySelectorAll("dt"))
+      .filter(dt => dt.querySelector(".lib-tag")?.textContent === "Best effort")
+      .map(dt => dt.querySelector("span[id]")!.textContent);
+    expect(tagged).toEqual(["Cursor", "Copilot", "Pi", "Kilo", "Grok"]);
+    for (const name of ["Codex", "OpenCode", "Claude", "Antigravity"]) {
+      expect(screen.getByRole("switch", { name }).closest(".srow")!.querySelector(".lib-tag")).toBeNull();
+    }
+    expect(screen.getByRole("switch", { name: "Cursor" })).toBeTruthy();
   });
 });
 

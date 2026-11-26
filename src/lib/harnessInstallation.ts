@@ -1,4 +1,5 @@
 import {
+  BEST_EFFORT_AGENTS,
   CENTRAL_AGENTS,
   INSTALL_AGENTS,
   LIGHT_AGENTS,
@@ -7,6 +8,7 @@ import {
   type LightAgent,
   type SetupPlan,
   type SetupSurfaceId,
+  type SupportTier,
 } from "../types";
 
 /**
@@ -175,8 +177,19 @@ export const HARNESS_LABELS: Record<InstallAgent, string> = {
   grok: "Grok",
 };
 
-/** Tab order of the harness pages. The light tier comes after Claude, so tabs 1-5 keep their numbers. */
-export const HARNESS_NAV_ORDER: InstallAgent[] = ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity", "grok"];
+/** Tab order of the harness pages: `PRIMARY_AGENTS` (digits 2-5), then `BEST_EFFORT_AGENTS`. */
+export const HARNESS_NAV_ORDER: InstallAgent[] = ["codex", "opencode", "antigravity", "claude", "cursor", "copilot", "pi", "kilo", "grok"];
+
+/** The support tier of `harness`: a label only, it changes nothing the app writes or turns on. */
+export function supportTier(harness: InstallAgent): SupportTier {
+  return (BEST_EFFORT_AGENTS as readonly string[]).includes(harness) ? "best_effort" : "primary";
+}
+
+/** The tag a best-effort harness shows beside its name. */
+export const BEST_EFFORT_LABEL = "Best effort";
+
+/** What the best-effort tag means, in one sentence. */
+export const BEST_EFFORT_NOTE = "Riggverk supports this agent, but checks new versions of it later than those of the primary agents.";
 
 /** The harnesses on for a fresh install and for a settings file that names none. Mirrors `HarnessId::DEFAULT_ON`. */
 export const DEFAULT_ENABLED_HARNESS_IDS: readonly InstallAgent[] = CENTRAL_AGENTS;

@@ -64,12 +64,23 @@ export const CENTRAL_AGENTS = ["codex", "opencode", "claude", "cursor"] as const
 /** The light tier: skills reach and runtime health. Off by default. Mirrors `light-harnesses.json`. */
 export const LIGHT_AGENTS = ["copilot", "pi", "kilo", "antigravity", "grok"] as const;
 
+/**
+ * The support tier, independent of central/light: the primary harnesses are the ones Riggverk checks and fixes first;
+ * the best-effort ones are supported, with new versions of them checked later. In tab order.
+ */
+export const PRIMARY_AGENTS = ["codex", "opencode", "antigravity", "claude"] as const;
+
+/** The best-effort support tier. In tab order, after the primary harnesses. */
+export const BEST_EFFORT_AGENTS = ["cursor", "copilot", "pi", "kilo", "grok"] as const;
+
 /** Every harness, in the backend's `HarnessId::ALL` order. */
 export const INSTALL_AGENTS = [...CENTRAL_AGENTS, ...LIGHT_AGENTS] as const;
 
 export type InstallAgent = (typeof INSTALL_AGENTS)[number];
 
 export type LightAgent = (typeof LIGHT_AGENTS)[number];
+
+export type SupportTier = "primary" | "best_effort";
 
 export type InstallationState = "not_installed" | "update_available" | "current" | "conflict" | "unavailable";
 

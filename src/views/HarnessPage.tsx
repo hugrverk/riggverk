@@ -18,7 +18,7 @@ import { useKeymap } from "../keyboard/useKeymap";
 import { fileConflictModelFor, filesSurfacesOf, type FileConflictModel } from "../lib/fileConflicts";
 import { CODEX_CONFIG_SURFACE, codexConfigGates, codexConfigModelFor } from "../lib/codexConfig";
 import { harnessHomePath, harnessSubline } from "../lib/harnessHeader";
-import { HARNESS_LABELS } from "../lib/harnessInstallation";
+import { BEST_EFFORT_LABEL, BEST_EFFORT_NOTE, HARNESS_LABELS, supportTier } from "../lib/harnessInstallation";
 import { runtimeRowsFor, runtimeVerdict, type HarnessRuntimeHealth } from "../lib/harnessRuntimeRows";
 import {
   harnessRowsFor,
@@ -60,7 +60,8 @@ function baseName(path: string): string {
 }
 
 /**
- * One harness (Claude, Codex, OpenCode, Cursor, Copilot, Pi, Kilo) as a page: the name with one mono line under it, then
+ * One harness (Claude, Codex, OpenCode, Cursor, Copilot, Pi, Kilo) as a page: the name (a best-effort harness adds a
+ * muted line with its tag and what it means) with one mono line under it, then
  * a hairline grid with a cell per surface (state pill, the switch of the target that gates it, and for a rules file,
  * Codex keys or skill and agent files in conflict their decision: the why line, the buttons, the choices), the runtime
  * facts, the OpenCode model and the safety notes. A cell with a decision in it spans the row and comes first. Compare
@@ -402,6 +403,15 @@ export function HarnessPage({
         <header className="hp-head">
           <div>
             <h4 className="hp-title">{label}</h4>
+            {supportTier(harness) === "best_effort" && (
+              <p className="hp-tier">
+                <span className="lib-tag">
+                  {BEST_EFFORT_LABEL}
+                  <span className="visually-hidden">:</span>
+                </span>{" "}
+                {BEST_EFFORT_NOTE}
+              </p>
+            )}
             <p className="hp-sub">
               {subline}
               {saving && <span role="status"> · autosaving…</span>}

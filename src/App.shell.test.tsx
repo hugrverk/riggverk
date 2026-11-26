@@ -237,13 +237,13 @@ describe("App shell", () => {
     expect(backend.lightHealthRequests).toEqual([]);
   });
 
-  it("puts an enabled light harness after Claude, loads only its health and opens its page", async () => {
+  it("puts an enabled light harness with the best-effort agents, loads only its health and opens its page", async () => {
     const backend = installBackend({ enabled_harness_ids: ["codex", "opencode", "claude", "cursor", "pi"] });
     render(<App />);
     await within(nav()).findByRole("button", { name: "Pi" });
-    // Overview, Codex, OpenCode, Cursor, Claude, Pi, History, Library, Settings.
+    // Overview, the primary Codex, OpenCode, Claude, the best-effort Cursor, Pi, then History, Library, Settings.
     expect(Array.from(nav().querySelectorAll("button.nav")).map(item => item.getAttribute("aria-label"))).toEqual([
-      "Overview", "Codex", "OpenCode", "Cursor", "Claude", "Pi", "History", "Library", "Settings",
+      "Overview", "Codex", "OpenCode", "Claude", "Cursor", "Pi", "History", "Library", "Settings",
     ]);
     // Pi has no digit (6 is History); it opens from the sidebar.
     fireEvent.click(within(nav()).getByRole("button", { name: "Pi" }));

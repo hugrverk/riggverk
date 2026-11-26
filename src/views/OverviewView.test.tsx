@@ -212,7 +212,7 @@ describe("Overview agents that are off", () => {
   it("lists the agents that are off and leads to Settings", () => {
     const { props: p } = renderOverview({ enabledHarnessIds: ["codex", "claude"] });
     const more = screen.getByRole("region", { name: "Agents that are off" });
-    expect(more.textContent).toContain("OpenCode, Cursor, Copilot, Pi, Kilo, Antigravity and Grok are off.");
+    expect(more.textContent).toContain("OpenCode, Antigravity, Cursor, Copilot, Pi, Kilo and Grok are off.");
     fireEvent.click(within(more).getByRole("button", { name: "Add agents…" }));
     expect(p.onNavigate).toHaveBeenCalledWith("settings");
   });
@@ -247,7 +247,7 @@ describe("Overview flow map", () => {
     expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "Claude, 1 to decide" })).toBeTruthy();
     expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "Codex, Up to date" })).toBeTruthy();
     expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "OpenCode, Update ready" })).toBeTruthy();
-    expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "5 agents off: Copilot, Pi, Kilo, Antigravity, Grok" })).toBeTruthy();
+    expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "5 agents off: Antigravity, Copilot, Pi, Kilo, Grok" })).toBeTruthy();
   });
 
   it("draws the decision as a filled square and every other state as a ring", () => {
@@ -285,7 +285,7 @@ describe("Overview flow map", () => {
 
   it("names the off group, uses a dashed ring and draws one base ghost curve", () => {
     renderOverview();
-    const group = within(map() as unknown as HTMLElement).getByRole("button", { name: "5 agents off: Copilot, Pi, Kilo, Antigravity, Grok" });
+    const group = within(map() as unknown as HTMLElement).getByRole("button", { name: "5 agents off: Antigravity, Copilot, Pi, Kilo, Grok" });
     expect(group.classList.contains("is-dim")).toBe(true);
     expect(group.querySelector(".flow-ring")).not.toBeNull();
     expect(group.querySelectorAll("svg.agent-glyph")).toHaveLength(5);
@@ -400,7 +400,7 @@ describe("Overview inspector", () => {
     expect(group.getAttribute("aria-pressed")).toBe("true");
     expect(within(inspector()).getByRole("heading", { name: "5 off" })).toBeTruthy();
     const list = within(inspector()).getByRole("list", { name: "Agents off" });
-    expect(within(list).getAllByRole("listitem").map(item => item.textContent?.trim())).toEqual(["Copilot", "Pi", "Kilo", "Antigravity", "Grok"]);
+    expect(within(list).getAllByRole("listitem").map(item => item.textContent?.trim())).toEqual(["Antigravity", "Copilot", "Pi", "Kilo", "Grok"]);
     expect(list.querySelectorAll("svg.agent-glyph")).toHaveLength(5);
     expect(within(inspector()).getByText("Off in Settings. Nothing flows to them.")).toBeTruthy();
     fireEvent.click(within(inspector()).getByRole("button", { name: "Open Settings" }));
@@ -481,7 +481,7 @@ describe("Overview inspector", () => {
     expect(within(inspector()).getByRole("heading", { name: "Riggverk base" })).toBeTruthy();
     const items = within(within(inspector()).getByRole("list", { name: "Riggverk base contents" })).getAllByRole("listitem").map(row => row.textContent);
     expect(items).toEqual(["Skills24 skills", "Agents6 agents", "Rules1 rules file"]);
-    expect(within(inspector()).getByText("Codex, OpenCode, Cursor and Claude")).toBeTruthy();
+    expect(within(inspector()).getByText("Codex, OpenCode, Claude and Cursor")).toBeTruthy();
     fireEvent.click(within(inspector()).getByRole("button", { name: "Open in Library" }));
     expect(p.onNavigate).toHaveBeenCalledWith("library");
     fireEvent.click(within(map() as unknown as HTMLElement).getByRole("button", { name: /^Your refinements/ }));

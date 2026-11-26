@@ -6,7 +6,7 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 
 ## Sidebar and digits
 
-`1` opens Overview, `2`-`5` open Codex, OpenCode, Cursor and Claude, `6` opens History, `7` Library and `8` Settings. The digits are fixed: they do not move when you turn an agent off (the digit of a hidden agent does nothing). Copilot, Pi and Kilo are off by default; once enabled in Settings they appear after Claude and have no digit: open them from the sidebar or with `:copilot`, `:pi`, `:kilo`. `Mod+,` and `:settings` also open Settings. The same names work as commands (`:codex`, `:history`, `:library docs`). A badge on an agent shows how many things in it wait for your decision.
+`1` opens Overview, `2`-`5` open the primary agents Codex, OpenCode, Antigravity and Claude, `6` opens History, `7` Library and `8` Settings. The digits are fixed: they do not move when you turn an agent off (the digit of a hidden agent does nothing, as `4` does while Antigravity is off by default). The best-effort agents Cursor, Copilot, Pi, Kilo and Grok sit under a **Best effort** label after the primary ones and have no digit: open them from the sidebar or with `:cursor`, `:copilot`, `:pi`, `:kilo`, `:grok`. Copilot, Pi, Kilo, Antigravity and Grok are off by default; turn them on in Settings. `Mod+,` and `:settings` also open Settings. The same names work as commands (`:codex`, `:history`, `:library docs`). A badge on an agent shows how many things in it wait for your decision.
 
 ## Keyboard reference
 
@@ -96,7 +96,7 @@ Old copies: earlier releases copied the bundle into the data folder, and the app
 
 ## Agent pages
 
-Codex, OpenCode, Cursor and Claude each have a page: the name, one line under it (where the agent lives, how many skills and agents it loads, the CLI), **Preview** (`p`) and an update button labelled by what it will do (`u`: `install`, `update`, `update safe files` while some files are conflicts, or `review conflicts`). The update button is disabled with a reason while a task runs, while target changes save, or when everything is already current (`p` still previews).
+Every agent has a page: the name (a best-effort agent adds a **Best effort** line saying Riggverk supports it but checks its new versions later than those of the primary agents), one line under it (where the agent lives, how many skills and agents it loads, the CLI), **Preview** (`p`) and an update button labelled by what it will do (`u`: `install`, `update`, `update safe files` while some files are conflicts, or `review conflicts`). The update button is disabled with a reason while a task runs, while target changes save, or when everything is already current (`p` still previews).
 
 The page is a grid of cells, one per surface (rules, agents, skills, settings or MCP), each with a state pill and, where the surface is a target, the switch **Let Riggverk manage this** (it autosaves; a target that is off is left out of the plan and reads **Not managed**). Cells that need your decision come first and span the full width. Skills are not a target: one `skills` surface installs into the folders the enabled agents read, so an update on any agent page can also touch a folder another agent reads. Codex rules, agents and config are separate targets; `codex_config` starts off, and so does `claude_config` (Claude's attribution setting in `~/.claude/settings.json`: your other keys stay, and attribution you set yourself is left as it is).
 

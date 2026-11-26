@@ -64,8 +64,8 @@ describe("buildPlanFlow", () => {
     expect(flow.agents.map(entry => [entry.id, entry.chip, entry.curve, entry.sub, entry.decision])).toEqual([
       ["codex", "− 1 remove", "write", "1 remove", false],
       ["opencode", "~ 2 update", "write", "2 update", false],
-      ["cursor", "■ 1 kept", "kept", "1 kept, skipped", true],
       ["claude", "+ 1 · ~ 2", "write", "1 create · 2 update", false],
+      ["cursor", "■ 1 kept", "kept", "1 kept, skipped", true],
     ]);
     expect(flow.model.offGroup!.agents.map(entry => entry.id)).toEqual(["pi", "grok"]);
     expect(flow.sourceSub).toEqual({ base: "25 items · 7 writes", yours: "19 items · untouched" });
@@ -103,8 +103,8 @@ describe("buildPlanFlow", () => {
     expect(flow.agents.map(entry => [entry.id, entry.curve, entry.chip])).toEqual([
       ["codex", "written", "✓ 1"],
       ["opencode", "written", "✓ 2"],
-      ["cursor", "kept", "■ 1 yours"],
       ["claude", "written", "✓ 3"],
+      ["cursor", "kept", "■ 1 yours"],
     ]);
     expect(flow.sourceSub.base).toBe("25 items · in sync");
   });
@@ -189,8 +189,8 @@ describe("buildPlanFlow", () => {
         // Codex and OpenCode own no row: no chip and nothing counted, only the pack's curve reaches them.
         ["codex", 0, null],
         ["opencode", 0, null],
-        ["claude", 1, "+ 1 · ■ 1"],
         ["antigravity", 1, "+ 1 create"],
+        ["claude", 1, "+ 1 · ■ 1"],
       ]);
       expect(flow.sourceCurves["pack:kretsverket>codex"]).toBe("write");
       expect(flow.writes).toBe(3);
