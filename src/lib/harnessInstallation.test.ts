@@ -231,7 +231,7 @@ describe("the light tier (Copilot, Pi, Kilo, Antigravity, Grok)", () => {
   });
 
   it("sits in the tab order by support tier: the primary harnesses first, then the best-effort ones", () => {
-    expect(HARNESS_NAV_ORDER).toEqual(["codex", "opencode", "claude", "antigravity", "cursor", "copilot", "pi", "kilo", "grok"]);
+    expect(HARNESS_NAV_ORDER).toEqual(["codex", "opencode", "antigravity", "claude", "cursor", "copilot", "pi", "kilo", "grok"]);
     expect(HARNESS_NAV_ORDER).toEqual([...PRIMARY_AGENTS, ...BEST_EFFORT_AGENTS]);
     expect([...HARNESS_NAV_ORDER].sort()).toEqual([...INSTALL_AGENTS].sort());
     expect(HARNESS_LABELS.copilot).toBe("Copilot");
@@ -240,7 +240,7 @@ describe("the light tier (Copilot, Pi, Kilo, Antigravity, Grok)", () => {
   });
 
   it("has a support tier of its own, independent of central and light, that changes no default", () => {
-    expect([...PRIMARY_AGENTS]).toEqual(["codex", "opencode", "claude", "antigravity"]);
+    expect([...PRIMARY_AGENTS]).toEqual(["codex", "opencode", "antigravity", "claude"]);
     expect([...BEST_EFFORT_AGENTS]).toEqual(["cursor", "copilot", "pi", "kilo", "grok"]);
     expect([...PRIMARY_AGENTS, ...BEST_EFFORT_AGENTS].sort()).toEqual([...INSTALL_AGENTS].sort());
     for (const harness of PRIMARY_AGENTS) expect(supportTier(harness)).toBe("primary");

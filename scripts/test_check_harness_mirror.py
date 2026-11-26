@@ -116,21 +116,21 @@ class CheckHarnessMirrorTests(unittest.TestCase):
     def test_best_effort_tabs_must_follow_the_primary_ones(self) -> None:
         self.edit(
             mirror.TS_INSTALL,
-            '["codex", "opencode", "claude", "antigravity", "cursor", "copilot", "pi", "kilo", "grok"]',
-            '["codex", "opencode", "cursor", "claude", "antigravity", "copilot", "pi", "kilo", "grok"]',
+            '["codex", "opencode", "antigravity", "claude", "cursor", "copilot", "pi", "kilo", "grok"]',
+            '["codex", "opencode", "cursor", "antigravity", "claude", "copilot", "pi", "kilo", "grok"]',
         )
         self.assert_fails("best effort must follow primary")
 
     def test_tabs_out_of_tier_order(self) -> None:
         self.edit(
             mirror.TS_INSTALL,
-            '["codex", "opencode", "claude", "antigravity", "cursor", "copilot", "pi", "kilo", "grok"]',
-            '["codex", "opencode", "claude", "antigravity", "copilot", "cursor", "pi", "kilo", "grok"]',
+            '["codex", "opencode", "antigravity", "claude", "cursor", "copilot", "pi", "kilo", "grok"]',
+            '["codex", "opencode", "antigravity", "claude", "copilot", "cursor", "pi", "kilo", "grok"]',
         )
         self.assert_fails("best effort must follow primary")
 
     def test_a_harness_in_both_support_tiers(self) -> None:
-        self.edit(mirror.TS_TYPES, '["codex", "opencode", "claude", "antigravity"] as const', '["codex", "opencode", "claude", "antigravity", "cursor"] as const')
+        self.edit(mirror.TS_TYPES, '["codex", "opencode", "antigravity", "claude"] as const', '["codex", "opencode", "antigravity", "claude", "cursor"] as const')
         self.assert_fails("support tiers")
 
     def test_a_harness_in_neither_support_tier(self) -> None:

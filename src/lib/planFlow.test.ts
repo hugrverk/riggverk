@@ -189,8 +189,8 @@ describe("buildPlanFlow", () => {
         // Codex and OpenCode own no row: no chip and nothing counted, only the pack's curve reaches them.
         ["codex", 0, null],
         ["opencode", 0, null],
-        ["claude", 1, "+ 1 · ■ 1"],
         ["antigravity", 1, "+ 1 create"],
+        ["claude", 1, "+ 1 · ■ 1"],
       ]);
       expect(flow.sourceCurves["pack:kretsverket>codex"]).toBe("write");
       expect(flow.writes).toBe(3);

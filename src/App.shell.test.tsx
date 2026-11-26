@@ -219,10 +219,10 @@ describe("App shell", () => {
     render(<App />);
     await within(nav()).findByRole("button", { name: "Claude" });
     expect(within(nav()).queryByRole("button", { name: "OpenCode" })).toBeNull();
-    // OpenCode's digit does nothing; Claude stays on 4 and Library on 7.
+    // OpenCode's digit does nothing; Claude stays on 5 and Library on 7.
     fireEvent.keyDown(document.body, { key: "3" });
     expect(currentTab()).toBe("Overview");
-    fireEvent.keyDown(document.body, { key: "4" });
+    fireEvent.keyDown(document.body, { key: "5" });
     await waitFor(() => expect(currentTab()).toBe("Claude"));
     fireEvent.keyDown(document.body, { key: "7" });
     await waitFor(() => expect(currentTab()).toBe("Library"));

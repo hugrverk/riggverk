@@ -65,10 +65,10 @@ export const CENTRAL_AGENTS = ["codex", "opencode", "claude", "cursor"] as const
 export const LIGHT_AGENTS = ["copilot", "pi", "kilo", "antigravity", "grok"] as const;
 
 /**
- * The support tier, independent of central/light: the primary harnesses get Riggverk's full attention; the best-effort
- * ones have their files installed and tested, but new versions of the agent are not checked one by one. In tab order.
+ * The support tier, independent of central/light: the primary harnesses are the ones Riggverk checks and fixes first;
+ * the best-effort ones are supported, with new versions of them checked later. In tab order.
  */
-export const PRIMARY_AGENTS = ["codex", "opencode", "claude", "antigravity"] as const;
+export const PRIMARY_AGENTS = ["codex", "opencode", "antigravity", "claude"] as const;
 
 /** The best-effort support tier. In tab order, after the primary harnesses. */
 export const BEST_EFFORT_AGENTS = ["cursor", "copilot", "pi", "kilo", "grok"] as const;

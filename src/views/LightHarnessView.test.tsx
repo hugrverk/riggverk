@@ -148,7 +148,7 @@ describe("LightHarnessView", () => {
       return;
     }
     expect(tier!.textContent).toBe(
-      "Best effort: Riggverk installs and tests this agent's files, but does not verify each new version of the agent.",
+      "Best effort: Riggverk supports this agent, but checks new versions of it later than those of the primary agents.",
     );
     expect(tier!.querySelector(".lib-tag")!.textContent).toBe("Best effort:");
     expect(within(page).getByRole("heading", { name: LABELS[harness] })).toBeTruthy();

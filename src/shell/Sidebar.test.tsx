@@ -33,12 +33,12 @@ describe("Sidebar", () => {
   it("gives every destination its fixed digit as aria-keyshortcuts and tooltip, also with every agent on", () => {
     const { container } = plain({ enabledHarnessIds: ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity", "grok"] });
     const digit = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-keyshortcuts");
-    expect(["Overview", "Codex", "OpenCode", "Claude", "Antigravity", "History", "Library", "Settings"].map(digit)).toEqual([
+    expect(["Overview", "Codex", "OpenCode", "Antigravity", "Claude", "History", "Library", "Settings"].map(digit)).toEqual([
       "1", "2", "3", "4", "5", "6", "7", "8",
     ]);
     expect(screen.getByRole("button", { name: "Overview" }).getAttribute("title")).toBe("Overview (1)");
     expect(items(container)).toEqual([
-      "Overview", "Codex", "OpenCode", "Claude", "Antigravity", "Cursor", "Copilot", "Pi", "Kilo", "Grok", "History", "Library", "Settings",
+      "Overview", "Codex", "OpenCode", "Antigravity", "Claude", "Cursor", "Copilot", "Pi", "Kilo", "Grok", "History", "Library", "Settings",
     ]);
     // The best-effort agents have no digit.
     for (const name of ["Cursor", "Copilot", "Pi", "Kilo", "Grok"]) {
