@@ -11,7 +11,7 @@ import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { isSettingsConflictError } from "../lib/appSettingsMutation";
 import { displayPath } from "../lib/displayPath";
-import { BEST_EFFORT_LABEL, HARNESS_LABELS, supportTier } from "../lib/harnessInstallation";
+import { BEST_EFFORT_LABEL, HARNESS_LABELS, HARNESS_NAV_ORDER, supportTier } from "../lib/harnessInstallation";
 import { useSystemReducedMotion } from "../lib/motion";
 import {
   APP_FONT_SIZE_LABELS,
@@ -26,7 +26,7 @@ import {
 } from "../lib/settingsDraft";
 import type { AppUpdate } from "../hooks/useAppUpdate";
 import type { AppSettings, UpdateCheckChoice } from "../types";
-import { INSTALL_AGENTS, type InstallAgent } from "../types";
+import type { InstallAgent } from "../types";
 import { BindingButton } from "../ui/BindingButton";
 import { Pane } from "../ui/Pane";
 import { Switch } from "../ui/Switch";
@@ -687,7 +687,7 @@ export function SettingsView({
         )}
         <h3 className="sgroup">Agents</h3>
         <SettingRows label="Enabled agents">
-          {INSTALL_AGENTS.map(harness => {
+          {HARNESS_NAV_ORDER.map(harness => {
             const enabled = appSettings.enabled_harness_ids.includes(harness);
             return (
               <SettingRow
