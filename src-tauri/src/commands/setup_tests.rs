@@ -1,3 +1,7 @@
+// Test-only: the `tests` module of the file next to it. The inner attribute lets the repository checks
+// that read production Rust skip this file.
+#![cfg(test)]
+
 use super::*;
 
 /// `apply_single_artifact` with the sources of `workspace_root`, as an apply holds them.

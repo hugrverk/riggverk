@@ -1,3 +1,7 @@
+// Test-only: the `tests` module of the file next to it. The inner attribute lets the repository checks
+// that read production Rust skip this file.
+#![cfg(test)]
+
 use super::*;
 use std::fs;
 use std::path::PathBuf;

@@ -132,7 +132,7 @@ MIGRATION_FIXTURE_ALLOWLIST = {
     REPO_ROOT / "src-tauri/src/managed_reconciliation_contract.rs",
     REPO_ROOT / "src-tauri/src/managed_bootstrap.rs",
     REPO_ROOT / "src-tauri/src/commands/workspace.rs",
-    REPO_ROOT / "src-tauri/src/commands/setup.rs",
+    REPO_ROOT / "src-tauri/src/commands/setup_tests.rs",
     WS_ROOT / "metadata/pre-manifest-ownership.json",
     WS_ROOT / "metadata/shipped-digests.json",
     # Vendored upstream text (cloudflare/security-audit-skill) uses "triage" in its plain sense.

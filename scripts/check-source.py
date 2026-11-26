@@ -315,8 +315,8 @@ REQUIRED_RUST_TESTS = (
     ("src-tauri/src/commands/retired_workspace_files.rs", "the_frozen_list_matches_the_list_it_was_frozen_from"),
     ("src-tauri/src/commands/retired_workspace_files.rs", "every_listed_path_is_in_the_bundle_or_documented_as_retired"),
     ("src-tauri/src/cursor_profile_ops.rs", "cursor_backups_are_owner_only"),
-    ("src-tauri/src/commands/opencode_runtime.rs", "test_configs_match_pass_when_template_has_playwright_placeholders"),
-    ("src-tauri/src/commands/opencode_runtime.rs", "test_configs_match_warn_when_rendered_expected_differs"),
+    ("src-tauri/src/commands/opencode_runtime_tests.rs", "test_configs_match_pass_when_template_has_playwright_placeholders"),
+    ("src-tauri/src/commands/opencode_runtime_tests.rs", "test_configs_match_warn_when_rendered_expected_differs"),
 )
 REQUIRE = (
     # Codex reads $CODEX_HOME/skills when CODEX_HOME is customised and ~/.agents/skills by default.
