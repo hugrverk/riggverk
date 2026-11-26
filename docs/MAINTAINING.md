@@ -179,6 +179,8 @@ The history generators share one walk of every commit reachable from `HEAD` (and
 | pre-manifest upgrade smoke | `smoke-pre-manifest-upgrade.sh` | an install from a real old commit upgrades cleanly |
 | tauri runtime smoke | `smoke-tauri-runtime.sh` | the backend commands against a temporary `HOME` |
 
+CI runs both smokes on Linux (the `checks` job calls `release-check.sh`) and on macOS pushes. The Windows workflow runs `smoke-tauri-runtime.sh` under Git Bash; the pre-manifest smoke stays off Windows because it uses `shasum` and POSIX paths.
+
 A new `scripts/check-*.py`, `validate_*.py` or `smoke-*.sh` must be called from `release-check.sh`; `scripts/test_release_check_wiring.py` fails otherwise.
 
 ### Adding a rule
