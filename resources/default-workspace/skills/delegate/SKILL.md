@@ -155,4 +155,5 @@ Integrate parallel slices one at a time and re-run the checks after each. A conf
 
 ### Light harnesses
 
-- Copilot, Pi, Kilo, Antigravity and Grok usually have no subagents. Use an external CLI route whose preflight passes; with none, say so and do the work in this session.
+- Copilot, Pi, Kilo and Grok usually have no subagents. Use an external CLI route whose preflight passes; with none, say so and do the work in this session.
+- Antigravity has built-in subagents (`research`, `browser`, and `self`, a clone of the calling agent); Riggverk installs no custom agents for it. For the subagent route use `self` in its own worktree (the `branch` workspace option), or use an external CLI route.
