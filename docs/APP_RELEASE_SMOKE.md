@@ -226,7 +226,7 @@ Use a scratch profile or back up `~/.claude/settings.json` first.
 
 ## Linux packages
 
-For a release, after `./scripts/release.sh build-linux`, before the folder is copied to the Mac: the packages in `release/linux/` (or `release/linux-build/` from `scripts/linux-build.sh`). Start every run with a throwaway profile so your own settings are not read or written:
+For a release, before `publish`: the packages of the build candidate (`gh release download linux-candidate-v<version> --dir <folder>`), or those in `release/linux/` after `./scripts/release.sh build-linux` (or `release/linux-build/` from `scripts/linux-build.sh`). Start every run with a throwaway profile so your own settings are not read or written:
 
 ```bash
 export HOME="$(mktemp -d)" XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share" XDG_CACHE_HOME="$HOME/.cache"
