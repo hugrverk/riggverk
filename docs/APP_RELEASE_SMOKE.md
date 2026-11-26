@@ -11,7 +11,7 @@ export RIGGVERK_BACKUP_DIR="$HOME/backups"
 npm run tauri dev        # or open the built bundle from this shell
 ```
 
-The digit keys below are fixed: `1` Overview, `2`-`5` the primary agents Codex, OpenCode, Claude, Antigravity, `6` History, `7` Library, `8` Settings. Copilot, Pi, Kilo, Antigravity and Grok are off by default (`5` does nothing until Antigravity is on). The best-effort agents Cursor, Copilot, Pi, Kilo and Grok sit under a **Best effort** label after the primary ones and have no digit (they open from the sidebar or with `:cursor`, `:copilot`, `:pi`, `:kilo`, `:grok`); each of their pages shows a **Best effort** line under its name, and Settings tags their switches. The page names (Overview, agent pages, History, Library, Settings) are the sidebar's.
+The digit keys below are fixed: `1` Overview, `2`-`5` the primary agents Codex, OpenCode, Antigravity, Claude, `6` History, `7` Library, `8` Settings. Copilot, Pi, Kilo, Antigravity and Grok are off by default (`4` does nothing until Antigravity is on). The best-effort agents Cursor, Copilot, Pi, Kilo and Grok sit under a **Best effort** label after the primary ones and have no digit (they open from the sidebar or with `:cursor`, `:copilot`, `:pi`, `:kilo`, `:grok`); each of their pages shows a **Best effort** line under its name, and Settings tags their switches. The page names (Overview, agent pages, History, Library, Settings) are the sidebar's.
 
 ## 1. Preflight
 
