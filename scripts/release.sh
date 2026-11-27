@@ -952,6 +952,11 @@ build_linux_for_ci() {
   [ -z "$(ls -A "$out" 2>/dev/null)" ] || fail "$out is not empty; pass a new or empty directory to --ci"
   version="$(python3 scripts/release_tools.py check-versions)" || fail "the app version is inconsistent (see above)"
   info "app version: $version"
+  # The workflow builds whatever main is. Started before the release pull request is merged, it would build the
+  # version that is already out and upload a build candidate for it.
+  if remote_tag_exists "v$version"; then
+    fail "v$version is already released; merge the release pull request first, then build main"
+  fi
   commit="$(git rev-parse HEAD)"
 
   tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/riggverk-release.XXXXXX")"
