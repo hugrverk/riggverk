@@ -210,8 +210,16 @@ def _build_profile_section(
     return result
 
 
-def build_bash_profile(policy: dict[str, Any], profile_name: str) -> dict[str, str]:
-    return _build_profile_section(policy, profile_name, build_bash_section)
+def build_bash_profile(policy: dict[str, Any], profile_name: str) -> dict[str, str] | str:
+    """A profile that denies everything is the bare action `deny`.
+
+    OpenCode 1.x removes a tool only when the last rule for it is the catch-all deny. A map keeps
+    the tool, and a line that is only a redirect (`< file`) yields no command for a rule to match.
+    """
+    section = _build_profile_section(policy, profile_name, build_bash_section)
+    if all(action == "deny" for action in section.values()):
+        return "deny"
+    return section
 
 
 def build_edit_profile(policy: dict[str, Any], profile_name: str) -> dict[str, str]:
