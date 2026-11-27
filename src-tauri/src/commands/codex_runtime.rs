@@ -235,6 +235,48 @@ const CODEX_MERGE_FAILED: &str = "the Codex config could not be merged safely; n
 /// Python would otherwise read as "no Python" and fail whichever test asked first.
 const PYTHON_PROBE_TIMEOUT: std::time::Duration =
     std::time::Duration::from_secs(if cfg!(test) { 120 } else { 10 });
+/// How many rounds in which a candidate timed out and none answered are tried before "no Python"
+/// is kept for the rest of the process. A Python that hangs every time must not slow every call.
+const PYTHON_PROBE_ROUNDS: u8 = 3;
+
+/// What one round over the candidates found. `timed_out`: a candidate did not answer in time.
+#[derive(Debug, PartialEq)]
+struct PythonProbe {
+    found: Option<PathBuf>,
+    timed_out: bool,
+}
+
+/// The probe's answer for this process. "None" from a round in which a candidate timed out may
+/// only mean a slow start (a cold disk, a scan of a new binary), so it is not kept and the next
+/// call probes again, for at most [`PYTHON_PROBE_ROUNDS`] rounds.
+struct PythonCache {
+    answer: Option<Option<PathBuf>>,
+    timed_out_rounds: u8,
+}
+
+impl PythonCache {
+    const fn new() -> Self {
+        Self {
+            answer: None,
+            timed_out_rounds: 0,
+        }
+    }
+
+    fn get(&mut self, probe: impl FnOnce() -> PythonProbe) -> Option<PathBuf> {
+        if let Some(answer) = &self.answer {
+            return answer.clone();
+        }
+        let probe = probe();
+        if probe.found.is_none() && probe.timed_out {
+            self.timed_out_rounds += 1;
+            if self.timed_out_rounds < PYTHON_PROBE_ROUNDS {
+                return None;
+            }
+        }
+        self.answer = Some(probe.found.clone());
+        probe.found
+    }
+}
 
 #[cfg(test)]
 thread_local! {
@@ -256,25 +298,29 @@ pub(crate) fn with_codex_python<T>(python: Option<PathBuf>, f: impl FnOnce() -> 
 /// (Python 3.11+), from the tool folders a GUI launch lacks and then `PATH`. A Finder launch puts
 /// macOS's own `/usr/bin/python3` (3.9) first, whose fallback parser refuses valid TOML. A
 /// candidate another user could replace is never run (see
-/// [`crate::executable_resolver::trusted_executable`]). Probed once per process, and the resolved
-/// file is what runs; `None` when there is none. The probed file is checked again on every call, so
-/// one that has since become changeable by another user is no longer run.
+/// [`crate::executable_resolver::trusted_executable`]). Probed once per process (see
+/// [`PythonCache`] for a probe that timed out), and the resolved file is what runs; `None` when
+/// there is none. The probed file is checked again on every call, so one that has since become
+/// changeable by another user is no longer run.
 pub(crate) fn codex_python() -> Option<PathBuf> {
     #[cfg(test)]
     if let Some(forced) = FORCED_CODEX_PYTHON.with(|forced| forced.borrow().clone()) {
         return forced;
     }
-    static FOUND: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
-    still_trusted(
-        FOUND
-            .get_or_init(|| {
-                first_python_with_tomllib(&crate::executable_resolver::python3_candidates(
+    static FOUND: std::sync::Mutex<PythonCache> = std::sync::Mutex::new(PythonCache::new());
+    let found = FOUND
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(|| {
+            probe_pythons(
+                &crate::executable_resolver::python3_candidates(
                     crate::executable_resolver::tool_dirs(),
                     std::env::var_os("PATH"),
-                ))
-            })
-            .as_deref(),
-    )
+                ),
+                PYTHON_PROBE_TIMEOUT,
+            )
+        });
+    still_trusted(found.as_deref())
 }
 
 /// `python` when [`crate::executable_resolver::trusted_executable`] still accepts it and it still
@@ -284,32 +330,35 @@ fn still_trusted(python: Option<&Path>) -> Option<PathBuf> {
     crate::executable_resolver::trusted_executable(python).filter(|resolved| resolved == python)
 }
 
-fn first_python_with_tomllib(candidates: &[PathBuf]) -> Option<PathBuf> {
+fn probe_pythons(candidates: &[PathBuf], timeout: std::time::Duration) -> PythonProbe {
     let cwd = if cfg!(unix) {
         PathBuf::from("/")
     } else {
         std::env::temp_dir()
     };
-    candidates
+    let mut timed_out = false;
+    let found = candidates
         .iter()
         .filter_map(|python| crate::executable_resolver::trusted_executable(python))
         .find(|python| {
             let Some(program) = python.to_str() else {
                 return false;
             };
-            super::process::run_cmd_bounded(
+            let result = super::process::run_cmd_bounded(
                 program,
                 &["-I", "-c", "import tomllib"],
                 &cwd,
                 super::process::BoundedCmdOptions {
-                    timeout: Some(PYTHON_PROBE_TIMEOUT),
+                    timeout: Some(timeout),
                     stdout_cap: 1024,
                     stderr_cap: 1024,
                     ..super::process::BoundedCmdOptions::default()
                 },
-            )
-            .success
-        })
+            );
+            timed_out |= result.timed_out;
+            result.success
+        });
+    PythonProbe { found, timed_out }
 }
 
 /// Render Codex managed config fields from `managed_source` into `dest` via the
@@ -1012,12 +1061,74 @@ apps._default.default_tools_approval_mode = "prompt"
         let old = fake("old", 1);
         let new = fake("new", 0);
         let newer = fake("newer", 0);
-        let found = first_python_with_tomllib(&[old.clone(), new.clone(), newer]);
-        let none = first_python_with_tomllib(&[old]);
+        let found = probe_pythons(&[old.clone(), new.clone(), newer], PYTHON_PROBE_TIMEOUT).found;
+        let none = probe_pythons(&[old], PYTHON_PROBE_TIMEOUT).found;
         let new = fs::canonicalize(&new).expect("resolve");
         cleanup(&dir);
         assert_eq!(found, Some(new));
         assert_eq!(none, None);
+    }
+
+    #[test]
+    fn no_python_from_a_round_that_timed_out_is_asked_again() {
+        let slow = || PythonProbe {
+            found: None,
+            timed_out: true,
+        };
+        let python = PathBuf::from("/opt/tools/python3");
+        let mut cache = PythonCache::new();
+        assert_eq!(cache.get(slow), None);
+        let found = PythonProbe {
+            found: Some(python.clone()),
+            timed_out: false,
+        };
+        assert_eq!(cache.get(|| found), Some(python.clone()));
+        // A found Python is the answer for the rest of the process.
+        assert_eq!(cache.get(|| panic!("probed again")), Some(python));
+
+        // A candidate that never answers is given up on after the last round.
+        let mut cache = PythonCache::new();
+        for _ in 0..PYTHON_PROBE_ROUNDS {
+            assert_eq!(cache.get(slow), None);
+        }
+        assert_eq!(cache.get(|| panic!("probed again")), None);
+
+        // "None" from a round in which every candidate answered is final at once.
+        let mut cache = PythonCache::new();
+        let none = PythonProbe {
+            found: None,
+            timed_out: false,
+        };
+        assert_eq!(cache.get(|| none), None);
+        assert_eq!(cache.get(|| panic!("probed again")), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_candidate_that_does_not_answer_in_time_is_reported() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_root("python-probe-slow");
+        let fake = |name: &str, body: &str| {
+            let path = dir.join(name).join("python3");
+            write_file(&path, &format!("#!/bin/sh\n{body}\n"));
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod");
+            path
+        };
+        let slow = fake("slow", "sleep 30");
+        let good = fake("good", "exit 0");
+        let limit = std::time::Duration::from_millis(300);
+        let none = probe_pythons(std::slice::from_ref(&slow), limit);
+        let later = probe_pythons(&[slow, good.clone()], limit);
+        let good = fs::canonicalize(&good).expect("resolve");
+        cleanup(&dir);
+        assert_eq!(
+            none,
+            PythonProbe {
+                found: None,
+                timed_out: true
+            }
+        );
+        assert_eq!(later.found, Some(good));
     }
 
     /// The tool folders come before `PATH`, and a candidate another user could replace is skipped
@@ -1039,9 +1150,9 @@ apps._default.default_tools_approval_mode = "prompt"
             vec![tools.clone()],
             Some(path.clone().into_os_string()),
         );
-        let trusted = first_python_with_tomllib(&candidates);
+        let trusted = probe_pythons(&candidates, PYTHON_PROBE_TIMEOUT).found;
         fs::set_permissions(&tools, fs::Permissions::from_mode(0o777)).expect("chmod");
-        let skipped = first_python_with_tomllib(&candidates);
+        let skipped = probe_pythons(&candidates, PYTHON_PROBE_TIMEOUT).found;
         let (in_tool_folder_resolved, on_path_resolved) = (
             fs::canonicalize(&in_tool_folder).expect("resolve"),
             fs::canonicalize(&on_path).expect("resolve"),
@@ -1077,7 +1188,7 @@ apps._default.default_tools_approval_mode = "prompt"
         fs::create_dir_all(dir.join("linked")).expect("dir");
         std::os::unix::fs::symlink(&shared, &linked).expect("link");
 
-        let found = first_python_with_tomllib(&[shared.clone(), writable, linked]);
+        let found = probe_pythons(&[shared.clone(), writable, linked], PYTHON_PROBE_TIMEOUT).found;
         let ran = marker.exists();
         let refused = crate::executable_resolver::trusted_executable(&shared);
         cleanup(&dir);
