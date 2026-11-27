@@ -230,7 +230,11 @@ pub(crate) const CODEX_PYTHON_REQUIRED: &str =
     "Python 3.11 or newer is needed to update the Codex config. A python3 that someone other than you or root owns or can write, or whose folder or a folder above it they can write, is not used.";
 /// A merge script failed. Its output is never shown: it can quote lines of the user's config.
 const CODEX_MERGE_FAILED: &str = "the Codex config could not be merged safely; nothing was written";
-const PYTHON_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+/// How long one candidate may take to answer the probe. Tests wait much longer: every test
+/// process probes for itself, and a stalled runner that needs more than ten seconds to start
+/// Python would otherwise read as "no Python" and fail whichever test asked first.
+const PYTHON_PROBE_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(if cfg!(test) { 120 } else { 10 });
 
 #[cfg(test)]
 thread_local! {
