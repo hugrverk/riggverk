@@ -636,6 +636,7 @@ export interface OpenCodeConfigPrecedence {
 }
 
 export interface OpenCodeRuntimeHealth {
+  checked_version?: string | null;
   status: string;
   template_config_path: string;
   installed_config_path: string;
@@ -721,6 +722,7 @@ export interface CodexAgentMismatch {
 }
 
 export interface CodexRuntimeHealth {
+  checked_version?: string | null;
   status: string;
   rules_status: string;
   rules_source_path: string;
@@ -752,6 +754,7 @@ export interface CodexRuntimeHealth {
 }
 
 export interface CursorProfileHealth {
+  checked_version?: string | null;
   status: "synced" | "diverged" | "missing" | "partial" | "unsafe" | "stale" | "unknown" | string;
   profile_root: string;
   profile_root_source: "default" | string;
@@ -771,6 +774,7 @@ export interface CursorProfileHealth {
 }
 
 export interface ClaudeRuntimeHealth {
+  checked_version?: string | null;
   rules_synced: boolean;
   agents_synced: boolean;
   skills_synced: boolean;

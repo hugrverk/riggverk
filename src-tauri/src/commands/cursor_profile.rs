@@ -14,6 +14,7 @@ use crate::skill_sources::SkillSources;
 
 #[derive(Serialize)]
 pub struct CursorProfileHealth {
+    pub checked_version: Option<String>,
     status: String,
     profile_root: String,
     profile_root_source: String,
@@ -744,6 +745,9 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     };
 
     Ok(CursorProfileHealth {
+        checked_version: crate::harness_versions::get(crate::agent_targets::HarnessId::Cursor)
+            .checked_version
+            .clone(),
         status,
         profile_root,
         profile_root_source,

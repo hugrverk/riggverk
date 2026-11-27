@@ -25,6 +25,7 @@ use crate::skill_sources::SkillSources;
 /// All managed Claude surface states.
 #[derive(Debug, Clone, Serialize)]
 pub struct ClaudeRuntimeHealth {
+    pub checked_version: Option<String>,
     /// Whether Claude rules (~/.claude/CLAUDE.md) are synced.
     pub rules_synced: bool,
     /// Whether Claude native agents (~/.claude/agents) are synced.
@@ -223,6 +224,9 @@ fn compute_health_with_bundle(
     };
 
     ClaudeRuntimeHealth {
+        checked_version: crate::harness_versions::get(crate::agent_targets::HarnessId::Claude)
+            .checked_version
+            .clone(),
         rules_synced,
         agents_synced,
         skills_synced,

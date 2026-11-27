@@ -27,6 +27,7 @@ pub struct OpenCodeAgentMismatch {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct OpenCodeRuntimeHealth {
+    pub checked_version: Option<String>,
     pub status: String,
     pub template_config_path: String,
     pub installed_config_path: String,
@@ -1811,6 +1812,9 @@ fn compute_health_in(
     };
 
     OpenCodeRuntimeHealth {
+        checked_version: crate::harness_versions::get(crate::agent_targets::HarnessId::OpenCode)
+            .checked_version
+            .clone(),
         status,
         template_config_path: template_config_path_str,
         installed_config_path: installed_config_path_str,

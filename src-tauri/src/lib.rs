@@ -18,6 +18,7 @@ mod disabled_skills;
 mod env_overrides;
 mod executable_resolver;
 mod file_conflicts;
+mod harness_versions;
 mod installation_status;
 mod jsonc;
 mod kept_files;

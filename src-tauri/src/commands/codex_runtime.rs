@@ -27,6 +27,7 @@ pub struct CodexAgentMismatch {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct CodexRuntimeHealth {
+    pub checked_version: Option<String>,
     pub status: String,
     pub rules_status: String,
     pub rules_source_path: String,
@@ -852,6 +853,9 @@ fn compute_health_with_bundle(
     };
 
     CodexRuntimeHealth {
+        checked_version: crate::harness_versions::get(crate::agent_targets::HarnessId::Codex)
+            .checked_version
+            .clone(),
         status,
         rules_status,
         rules_source_path: rules_source_path_str,
