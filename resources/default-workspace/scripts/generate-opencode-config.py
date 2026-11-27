@@ -249,7 +249,12 @@ def build_permission(policy):
 
 
 def build_bash_profile(policy, profile_name):
-    """Build a role bash profile: its own rules, plus every deny of the base bash section."""
+    """Build a role bash profile: its own rules, plus every deny of the base bash section.
+
+    A profile that denies everything is the bare action `deny`. OpenCode 1.x removes a tool only
+    when the last rule for it is the catch-all deny. A map keeps the tool, and a line that is only
+    a redirect (`< file`) yields no command for a rule to match.
+    """
     profiles = policy.get("role_profiles", {})
     if profile_name not in profiles:
         print(f"ERROR: unknown role profile: {profile_name}", file=sys.stderr)
@@ -262,6 +267,8 @@ def build_bash_profile(policy, profile_name):
     for pattern, action in build_bash_section(policy).items():
         if action == "deny":
             result[pattern] = "deny"
+    if all(action == "deny" for action in result.values()):
+        return "deny"
     return result
 
 

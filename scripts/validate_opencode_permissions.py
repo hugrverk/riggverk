@@ -79,6 +79,7 @@ MANAGED_KEYS_PATH = REPO_ROOT / "resources" / "default-workspace" / "metadata" /
 READONLY_ROLES = ("repo-scout", "inspector", "sentinel")
 ALL_ROLES = tuple(path.name.removesuffix(".role.json") for path in sorted(ROLES_DIR.glob("*.role.json")))
 RESTRICTIVE_ROLES = READONLY_ROLES + ("scribe", "verifier")
+NO_SHELL_ROLES = READONLY_ROLES + ("scribe",)
 
 def _root_form(pattern: str) -> str:
     """OpenCode matches read/edit rules against the worktree-relative path, so `**/P` needs a root twin `P`."""
@@ -679,7 +680,24 @@ def _secret_read_errors(role: str, perm: dict) -> list[str]:
     return errors
 
 
+def no_shell_errors(role: str, perm: dict) -> list[str]:
+    """A role without a shell carries `bash` as the bare action `deny`.
+
+    OpenCode 1.x removes a tool only when the last rule for it is the catch-all deny. A pattern map
+    keeps the tool, and a line that is only a redirect (`< file`, `> file`) yields no command for a
+    rule to match, so it runs.
+    """
+    if perm.get("bash") == "deny":
+        return []
+    return [
+        f"{role}: bash must be the bare action deny, so OpenCode removes the tool; "
+        "a line that is only a redirect (`< file`, `> file`) matches no bash rule and runs"
+    ]
+
+
 def destructive_errors(role: str, perm: dict) -> list[str]:
+    if perm.get("bash") == "deny":
+        return []
     bash = _bash_section(perm)
     return [f"{role}: missing bash deny {pat}" for pat in DESTRUCTIVE_BASH if bash.get(pat) != "deny"]
 
@@ -875,9 +893,10 @@ def secret_coverage_errors(role: str, perm: dict, policy: dict) -> list[str]:
                 if read.get(form) != "deny":
                     errors.append(f"{role}: missing read deny {form}")
     bash = _bash_section(perm)
-    for pattern in secret_content_denies(policy):
-        if bash.get(pattern) != "deny":
-            errors.append(f"{role}: missing bash deny {pattern}")
+    if perm.get("bash") != "deny":
+        for pattern in secret_content_denies(policy):
+            if bash.get(pattern) != "deny":
+                errors.append(f"{role}: missing bash deny {pattern}")
     for name in SECRET_NAME_FLOOR:
         target = _floor_target(name)
         if effective_read_action(perm, target) != "deny":
@@ -1048,12 +1067,12 @@ BUILTIN_AGENT_ACTIONS = [
 ]
 # Tools OpenCode removes from the model's tool list (Permission.disabled): read-only agents must not see them.
 BUILTIN_AGENT_HIDDEN_TOOLS = {
-    "explore": ["edit", "write", "apply_patch", "task", "todowrite", "playwright_browser_click", "plan_exit"],
+    "explore": ["edit", "write", "apply_patch", "task", "todowrite", "playwright_browser_click", "plan_exit", "bash"],
     "plan": [],
 }
 BUILTIN_AGENT_VISIBLE_TOOLS = {
     "plan": ["edit", "write", "task", "question"],
-    "explore": ["read", "grep", "glob", "bash"],
+    "explore": ["read", "grep", "glob"],
 }
 
 
@@ -1449,8 +1468,7 @@ def validate() -> list[str]:
         for cmd in READONLY_BASH_DENY:
             if bash_is_allowed(perm, cmd):
                 errors.append(f"{role}: must not allow bash {cmd!r} ({explain_bash(perm, cmd)})")
-        if any(action != "deny" for action in perm.get("bash", {}).values()):
-            errors.append(f"{role}: bash must contain deny actions only")
+        errors.extend(no_shell_errors(role, perm))
 
     verifier = compose_role_permission(load_role("verifier"))
     if verifier.get("edit") != "deny":
@@ -1471,8 +1489,7 @@ def validate() -> list[str]:
             pattern, action = winning_rule(scribe, "edit", path)
             errors.append(f"scribe: must not allow edit {path!r} (matched {pattern!r} -> {action})")
     _validate_restrictive_profile_quality("scribe", scribe, errors)
-    if any(action != "deny" for action in scribe.get("bash", {}).values()):
-        errors.append("scribe: bash must contain deny actions only")
+    errors.extend(no_shell_errors("scribe", scribe))
     for cmd in READONLY_BASH_DENY:
         if bash_is_allowed(scribe, cmd):
             errors.append(f"scribe: must not allow bash {cmd!r} ({explain_bash(scribe, cmd)})")

@@ -26,6 +26,7 @@ from opencode_permission_eval import (  # noqa: E402
     effective_bash_action,
     effective_edit_action,
     effective_read_action,
+    ruleset_from_section,
     shell_command_patterns,
     tool_hidden,
     wildcard_match,
@@ -49,6 +50,7 @@ from validate_opencode_permissions import (  # noqa: E402
     ALL_ROLES,
     ARCHITECT_BASH_ACTIONS,
     CREDENTIAL_CONFIG_READ,
+    NO_SHELL_ROLES,
     READ_ACTIONS,
     SECRET_READ,
     SECRET_READ_PATTERNS,
@@ -60,6 +62,7 @@ from validate_opencode_permissions import (  # noqa: E402
     compound_deny_targets,
     destructive_errors,
     lexical_frontmatter_errors,
+    no_shell_errors,
     secret_coverage_errors,
     secret_mention_errors,
     secret_spelling_errors,
@@ -344,6 +347,8 @@ class TestReadOnlyRoles(unittest.TestCase):
         for role in READONLY_ROLES + ("scribe", "verifier"):
             perm = compose_role_permission(load_role(role))
             bash = perm.get("bash", {})
+            if bash == "deny":
+                continue
             self.assertIsInstance(bash, dict)
             for pattern in RESTRICTIVE_BROAD_ALLOW_PATTERNS:
                 with self.subTest(role=role, pattern=pattern):
@@ -352,6 +357,54 @@ class TestReadOnlyRoles(unittest.TestCase):
                         "allow",
                         f"{role} must not broadly allow {pattern!r}",
                     )
+
+
+class TestNoShellRoles(unittest.TestCase):
+    """OpenCode 1.x removes a tool only when its last rule is the catch-all deny; a pattern map
+    keeps the tool, and a line that is only a redirect (`< file`) matches no rule and runs."""
+
+    def test_roles_without_a_shell_and_explore_get_a_bare_deny(self) -> None:
+        policy = load_policy()
+        permissions = {role: compose_role_permission(load_role(role)) for role in NO_SHELL_ROLES}
+        permissions["explore"] = build_builtin_agent_overrides(policy)["explore"]["permission"]
+        for name, perm in permissions.items():
+            with self.subTest(agent=name):
+                self.assertEqual(perm["bash"], "deny")
+                self.assertTrue(tool_hidden(ruleset_from_section("bash", perm["bash"]), "bash"))
+        explore = compose_agent_rules("explore", build_base_permission(policy), permissions["explore"])
+        self.assertTrue(tool_hidden(explore, "bash"))
+
+    def test_the_no_shell_set_is_the_read_only_roles_and_scribe(self) -> None:
+        self.assertEqual(sorted(NO_SHELL_ROLES), sorted(READONLY_ROLES + ("scribe",)))
+
+    def test_both_generators_write_a_deny_only_profile_as_a_bare_deny(self) -> None:
+        policy = load_policy()
+        shipped = _load_generator(SHIPPED_GENERATOR, "opencode_generator_profile_shipped")
+        for name, build in (("compose", opencode_policy_compose.build_bash_profile), ("shipped", shipped.build_bash_profile)):
+            with self.subTest(generator=name):
+                self.assertEqual(build(policy, "bash_readonly"), "deny")
+                self.assertIsInstance(build(policy, "bash_verifier"), dict)
+
+    def test_verifier_keeps_its_map_with_its_allows(self) -> None:
+        bash = compose_role_permission(load_role("verifier"))["bash"]
+        self.assertIsInstance(bash, dict)
+        self.assertEqual(next(iter(bash.items())), ("*", "deny"))
+        for command in ("npm test", "cargo test", "git status"):
+            with self.subTest(command=command):
+                self.assertEqual(bash.get(command), "allow")
+        self.assertEqual(bash.get("grep *"), "ask")
+        self.assertEqual(bash.get("rm -rf*"), "deny")
+
+    def test_a_no_shell_role_with_a_bash_map_fails_validation(self) -> None:
+        for role in NO_SHELL_ROLES:
+            with self.subTest(role=role):
+                perm = compose_role_permission(load_role(role))
+                self.assertEqual(no_shell_errors(role, perm), [])
+                perm["bash"] = {"*": "deny", "rm -rf*": "deny"}
+                errors = no_shell_errors(role, perm)
+                self.assertEqual(len(errors), 1)
+                self.assertIn(f"{role}: bash must be the bare action deny", errors[0])
+                self.assertIn("a line that is only a redirect", errors[0])
 
 
 class TestVerifier(unittest.TestCase):
@@ -556,6 +609,8 @@ class TestSecretDenials(unittest.TestCase):
         for role in self.ROLES:
             with self.subTest(role=role):
                 bash = compose_role_permission(load_role(role)).get("bash", {})
+                if bash == "deny":
+                    continue
                 self.assertIsInstance(bash, dict)
                 for pat in ("rm -rf*", "sudo*", "git reset --hard*", "git push --force*"):
                     self.assertEqual(bash.get(pat), "deny", f"{role} missing deny {pat}")
@@ -691,7 +746,7 @@ class TestShellCommandSplitting(unittest.TestCase):
         permissions["explore"] = build_builtin_agent_overrides(load_policy())["explore"]["permission"]
         for role, perm in permissions.items():
             with self.subTest(role=role):
-                self.assertTrue(all(action == "deny" for action in perm["bash"].values()))
+                self.assertEqual(perm["bash"], "deny")
             for command in ("git status", "git status && git status > changed.txt"):
                 with self.subTest(role=role, command=command):
                     self.assertEqual(effective_bash_action(perm, command), "deny")
@@ -1002,10 +1057,10 @@ class TestBuiltinAgents(unittest.TestCase):
 
     def test_explore_is_read_only(self) -> None:
         rules = self.rules("explore")
-        for tool in ("edit", "write", "apply_patch", "task", "todowrite", "playwright_browser_click"):
+        for tool in ("edit", "write", "apply_patch", "task", "todowrite", "playwright_browser_click", "bash"):
             with self.subTest(tool=tool):
                 self.assertTrue(tool_hidden(rules, tool))
-        for tool in ("read", "grep", "glob", "list", "bash"):
+        for tool in ("read", "grep", "glob", "list"):
             with self.subTest(tool=tool):
                 self.assertFalse(tool_hidden(rules, tool))
         self.assertEqual(action_for(rules, "read", "wp-config.php"), "deny")
@@ -1053,15 +1108,15 @@ class TestMutationRejection(unittest.TestCase):
 
     def test_widening_the_writing_part_of_a_compound_allows_bypass(self) -> None:
         # Each command of a compound is evaluated on its own, so `*&*` is not what gates `touch`.
-        action = self._mutated_action("repo-scout", {"*&*": "allow"}, "git status & touch changed.txt")
+        action = self._mutated_action("verifier", {"*&*": "allow"}, "git status & touch changed.txt")
         self.assertEqual(action, "deny")
-        action = self._mutated_action("repo-scout", {"git status": "allow", "touch *": "allow"}, "git status & touch changed.txt")
+        action = self._mutated_action("verifier", {"git status": "allow", "touch *": "allow"}, "git status & touch changed.txt")
         self.assertEqual(action, "allow")
-        action = self._mutated_action("repo-scout", {"git status": "allow", "sh": "allow"}, "git status | sh")
+        action = self._mutated_action("verifier", {"git status": "allow", "sh": "allow"}, "git status | sh")
         self.assertEqual(action, "allow")
 
     def test_widen_tree_allows_bypass_when_flag_deny_removed(self) -> None:
-        perm = compose_role_permission(load_role("repo-scout"))
+        perm = compose_role_permission(load_role("verifier"))
         bash = perm.setdefault("bash", {})
         assert isinstance(bash, dict)
         bash.pop("tree -*", None)
@@ -1136,12 +1191,12 @@ class TestMutationRejection(unittest.TestCase):
         self.assertTrue(edit_is_allowed(perm, "agents/architect.md"))
 
     def test_restore_git_diff_wildcard_allows_ext_diff(self) -> None:
-        action = self._mutated_action("repo-scout", {"git diff *": "allow"}, "git diff --ext-diff")
+        action = self._mutated_action("verifier", {"git diff *": "allow"}, "git diff --ext-diff")
         self.assertEqual(action, "allow")
 
     def test_dropping_a_secret_name_from_a_role_is_detected(self) -> None:
         policy = load_policy()
-        for role in ("architect", "repo-scout"):
+        for role in ("architect", "verifier"):
             with self.subTest(role=role):
                 perm = compose_role_permission(load_role(role))
                 self.assertEqual(secret_coverage_errors(role, perm, policy), [])
@@ -1170,6 +1225,8 @@ class TestMutationRejection(unittest.TestCase):
             with self.subTest(role=role):
                 perm = compose_role_permission(load_role(role))
                 self.assertEqual(destructive_errors(role, perm), [])
+                if perm["bash"] == "deny":
+                    continue
                 perm["bash"].pop("git clean -fdx*")
                 self.assertEqual(destructive_errors(role, perm), [f"{role}: missing bash deny git clean -fdx*"])
 

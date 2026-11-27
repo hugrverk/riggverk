@@ -315,6 +315,13 @@ class CrossCheckRowsTest(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertGreater(count, 500)
 
+    def test_agents_without_a_shell_end_on_the_catch_all_shell_deny(self) -> None:
+        resolved = model_resolution()
+        for agent in validator.NO_SHELL_ROLES + ("explore",):
+            with self.subTest(agent=agent):
+                shell = [rule for rule in resolved[agent] if rule.permission == "shell"]
+                self.assertEqual(shell[-1], Rule("shell", "*", "deny"))
+
     def test_mismatch_and_missing_agent_fail(self) -> None:
         resolved = model_resolution()
         resolved["plan"] = resolved["plan"] + [Rule("edit", "*", "allow")]
