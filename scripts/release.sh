@@ -1025,8 +1025,9 @@ cmd_build_linux() {
   if [ "$dry_run" -eq 1 ]; then
     step "build"
     would "build: scripts/linux-build.sh (AppImage, deb and rpm of $commit in the Ubuntu 22.04 image)"
-    would "copy them to $linux_dir as Riggverk-v${version:-VERSION}-linux-x86_64.AppImage, Riggverk-v${version:-VERSION}-linux-amd64.deb and Riggverk-v${version:-VERSION}-linux-x86_64.rpm, and write $linux_dir/linux-build.json (version, commit, SHA-256)"
-    would "sign $linux_dir/linux-build.json with $key (ssh-keygen -Y sign -n $linux_namespace) and check the signature against $linux_signers"
+    would "name them Riggverk-v${version:-VERSION}-linux-x86_64.AppImage, Riggverk-v${version:-VERSION}-linux-amd64.deb and Riggverk-v${version:-VERSION}-linux-x86_64.rpm in a temporary folder, and write linux-build.json (version, commit, SHA-256) next to them"
+    would "sign that linux-build.json with $key (ssh-keygen -Y sign -n $linux_namespace) and check the signature against $linux_signers"
+    would "replace $linux_dir with the signed files once the signature verifies, so $linux_dir/linux-build.json is the new stamp"
     would "upload $linux_dir as the draft prerelease linux-candidate-v${version:-VERSION} of $commit, replacing an earlier one"
     finish_dry_run
     return
