@@ -294,9 +294,9 @@ fn inspect_cli(
 /// Whether the found version is below the minimum, comparing the three numbers (`1.5.9` is
 /// below `1.5.15`); a pre-release or build suffix of the found version is ignored. `None` when
 /// either has no three numbers.
-fn older_than_minimum(found: &str, checked: &str) -> Option<bool> {
+fn older_than_minimum(found: &str, min: &str) -> Option<bool> {
     let core = found.split(['-', '+']).next().unwrap_or(found);
-    Some(version_numbers(core)? < version_numbers(checked)?)
+    Some(version_numbers(core)? < version_numbers(min)?)
 }
 
 // ── Skills ──

@@ -167,7 +167,11 @@ pub struct LightHarness {
     pub label: String,
     /// The CLI program name looked up on `PATH`; the only call made to it is `--version`.
     pub cli_program: String,
+    /// The newest CLI version its folders were checked with on a real install, from
+    /// `metadata/harness-versions.json`: the health names it beside the found version.
     pub cli_checked_version: Option<String>,
+    /// The oldest CLI version those folders hold for, from the same file: the health warns about
+    /// an older CLI.
     pub cli_min_version: Option<String>,
     /// The managed rules block; `None` for a harness that reads [`Self::shared_rules`] instead.
     pub rules: Option<LightRules>,

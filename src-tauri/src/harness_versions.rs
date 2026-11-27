@@ -1,4 +1,6 @@
-//! Checked and minimum CLI versions bundled with the workspace.
+//! The CLI versions each harness was checked with, from `metadata/harness-versions.json`: the one
+//! source for all nine harnesses. Nothing here runs a CLI; the pages only show these versions,
+//! and the light tier compares the minimum with the version its `--version` probe found.
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
@@ -13,7 +15,9 @@ const REGISTRY: &str =
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Versions {
+    /// The newest version the harness's paths were checked with on a real install.
     pub checked_version: Option<String>,
+    /// The oldest version those paths hold for; `None` when no lower bound is known.
     pub min_version: Option<String>,
 }
 
@@ -52,6 +56,8 @@ fn parse(text: &str) -> Result<Registry, String> {
     Ok(registry)
 }
 
+/// The versions recorded for `id`. The registry is embedded and a test validates it, so a
+/// parse failure here is a build defect.
 pub fn get(id: HarnessId) -> &'static Versions {
     static PARSED: OnceLock<Registry> = OnceLock::new();
     &PARSED
