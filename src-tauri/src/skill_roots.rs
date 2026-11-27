@@ -225,7 +225,10 @@ impl ReadFolder {
 /// - Copilot CLI reads `~/.agents/skills` and its own `~/.copilot/skills`, not `~/.claude/skills`.
 /// - Pi reads `~/.agents/skills` and `<agent dir>/skills`, not `~/.claude/skills`.
 /// - Kilo reads `~/.claude/skills` and `~/.agents/skills` by default, and `~/.kilo/skills`.
-/// - Antigravity reads neither shared folder. Checked on 2026-11-23 against App 2.34.0 and CLI
+/// - Antigravity's App reads neither shared folder, and its CLI discovers `~/.agents/skills`
+///   only from 1.5.16 (its changelog; not checked against a build), ranking it below `~/.gemini`
+///   for one name. That folder is not listed: the copies the app installs still win, and the App
+///   does not read it. Checked on 2026-11-23 against App 2.34.0 and CLI
 ///   `agy` 1.5.15 on macOS: the App reads `~/.gemini/config/skills` only; the CLI reads it,
 ///   `~/.gemini/antigravity-cli/skills` and `~/.gemini/skills` (not listed: the app never looks
 ///   at it), and for one name ranks `antigravity-cli/skills` above `config/skills`. No one order
@@ -639,7 +642,9 @@ mod tests {
             readers(K),
             &[ReadFolder::Kilo, ReadFolder::Agents, ReadFolder::Claude]
         );
-        // Antigravity reads neither shared folder. App 2.34.0 reads ~/.gemini/config/skills; agy
+        // Antigravity's App reads neither shared folder; agy reads ~/.agents/skills only from
+        // 1.5.16, below ~/.gemini, and it is not listed.
+        // App 2.34.0 reads ~/.gemini/config/skills; agy
         // 1.5.15 reads it and ~/.gemini/antigravity-cli/skills (and ~/.gemini/skills, which the
         // app never looks at). Both stay skill roots: one is installed into, one cleaned up.
         assert_eq!(

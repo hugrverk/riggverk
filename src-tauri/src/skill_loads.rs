@@ -967,7 +967,8 @@ mod tests {
     fn antigravity_reads_its_own_two_folders_only_and_flags_a_copy_of_the_users() {
         let fixture = Fixture::new("antigravity");
         let (older, _guard) = shipped_alpha_v1();
-        // The shared folders hold a copy too; Antigravity reads neither.
+        // The shared folders hold a copy too; the App reads neither, and agy ranks them below
+        // ~/.gemini.
         fixture.skill(".claude/skills", "alpha", &fixture.current("alpha"));
         fixture.skill(".agents/skills", "alpha", &fixture.current("alpha"));
         fixture.skill(".gemini/config/skills", "alpha", &fixture.current("alpha"));

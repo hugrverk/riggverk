@@ -1855,7 +1855,7 @@ function installedSkillFolders(enabled: readonly InstallAgent[]): SkillReadFolde
   return [
     ...(on("claude") ? ["claude" as const] : []),
     ...(agents ? ["agents" as const] : []),
-    // Antigravity reads neither shared folder: its App folder, which every surface reads, is installed while it is on.
+    // Antigravity's App reads neither shared folder (agy reads ~/.agents/skills from 1.5.16, below ~/.gemini): its App folder, which every surface reads, is installed while it is on.
     ...(on("antigravity") ? ["antigravity_app" as const] : []),
   ];
 }
