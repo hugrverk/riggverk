@@ -317,12 +317,6 @@ export function useLibraryController({
     }
   }, [isInvalidWorkspaceError, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
-  /** Lists the packs again after a change to them, and says so: the install status no longer matches them. */
-  const reloadChangedPacks = useCallback(async () => {
-    onPacksChanged?.();
-    await loadSkills();
-  }, [loadSkills, onPacksChanged]);
-
   const loadDocs = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
       const list = await invoke<DocSummary[]>("list_docs");
@@ -412,6 +406,15 @@ export function useLibraryController({
       setError(`Template: ${e}`);
     }
   }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
+
+  /**
+   * Lists the packs again after a change to them, and says so: the install status no longer matches them. Reads the base
+   * template again when it is loaded: it carries the packs' routing lines and leaves out those naming a disabled skill.
+   */
+  const reloadChangedPacks = useCallback(async () => {
+    onPacksChanged?.();
+    await Promise.all([loadSkills(), agentTemplate ? loadAgentTemplate() : null]);
+  }, [agentTemplate, loadAgentTemplate, loadSkills, onPacksChanged]);
 
   /** Shows one rules file: its refinements become the draft, with nothing unsaved. */
   const applyRulesFile = useCallback((file: RulesFileContent, savedDraft?: string) => {
@@ -904,13 +907,13 @@ export function useLibraryController({
     }
     try {
       await invoke("set_skills_enabled", { names, enabled });
-      await Promise.all([reloadChangedPacks(), agentTemplate ? loadAgentTemplate() : null]);
+      await reloadChangedPacks();
       return true;
     } catch (e) {
       setError(`${enabled ? "Enable" : "Disable"} skill: ${e}`);
       return false;
     }
-  }, [agentTemplate, confirm, loadAgentTemplate, reloadChangedPacks, setError, skillChoices]);
+  }, [confirm, reloadChangedPacks, setError, skillChoices]);
 
   /**
    * Chooses how much agents comment code, for every harness, then reads the policy and the base template (which carries
