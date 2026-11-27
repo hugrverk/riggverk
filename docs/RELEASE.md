@@ -77,6 +77,8 @@ Merge the pull request, then start the Linux release build on `main` (nothing el
 gh workflow run linux-release-build.yml --ref main
 ```
 
+Start it only after the merge: the build stops when the version on `main` already has a release tag, which is the case until the release pull request is in.
+
 The workflow has two jobs. The first may only read the repository: it runs `./scripts/release.sh build-linux --ci`, the container build described below, and leaves the three packages under their release names with `linux-build.json`, which records the version, the commit and the SHA-256 of each package. The second checks out and runs nothing from the repository: it checks that stamp against the commit of the run, makes a GitHub artifact attestation for each package, and uploads the four files as the **build candidate** `linux-candidate-v<version>` (see below). An attestation is signed with a short-lived certificate that GitHub issues to the run; the certificate names the workflow file and the commit, neither of which a workflow can set itself, and the signature is recorded in a public transparency log. The workflow uses no cache and no secret, and it never runs for pull requests.
 
 #### On a Linux machine instead
