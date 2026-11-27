@@ -1011,7 +1011,16 @@ mod tests {
         env.set_top_level("approvals_reviewer", "auto_review");
         // Install never writes over the user's value; only the explicit reset does.
         assert_eq!(env.kind(), OperationKind::Conflict);
-        assert!(env.plan_fingerprint().is_none(), "nothing to apply");
+        let plan = preview_setup(vec![SURFACE.to_string()]).expect("preview");
+        assert!(plan.plan_fingerprint.is_none(), "nothing to apply");
+        // A missing Python is a conflict too; this one must be about the user's value.
+        assert!(
+            plan.conflicts
+                .iter()
+                .any(|op| op.summary.contains("approvals_reviewer differs")),
+            "{:?}",
+            plan.conflicts
+        );
         assert!(env.read().contains("approvals_reviewer = \"auto_review\""));
     }
     #[test]
