@@ -229,8 +229,11 @@ mod tests {
         fn new() -> Self {
             let lock = guard::lock();
             let restore = guard::isolate_data_location_env();
+            // The process id keeps two test processes apart: on a coarse clock (Windows) they can
+            // read the same timestamp and would then share, and delete, one folder.
             let base = std::env::temp_dir().join(format!(
-                "riggverk-history-{}",
+                "riggverk-history-{}-{}",
+                std::process::id(),
                 setup_transaction::new_transaction_id().unwrap()
             ));
             let home = base.join("home");
