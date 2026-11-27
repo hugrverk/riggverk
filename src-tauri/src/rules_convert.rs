@@ -285,11 +285,23 @@ pub fn convert(
     // user's: the new block carries the level chosen now (see `comment_policy`, `answer_style`).
     // The pack routing section is the app's whatever it holds: it is composed from the packs and
     // the disabled skills, so it differs after any change of those, and the new block carries the
-    // routing composed now (see `pack_routing`).
+    // routing composed now (see `pack_routing`). So is a base routing section as a shipped base
+    // gives it with the bullets of some disabled skills left out: the list may have changed since.
+    let shipped: Vec<Vec<Section>> = std::iter::once(source)
+        .chain(bases.iter().map(|base| base.text.as_str()))
+        .map(|text| split_sections(&to_lf(text)))
+        .collect();
     changes.changed.retain(|section| {
         !crate::comment_policy::is_app_section(&section.text)
             && !crate::answer_style::is_app_section(&section.text)
             && section.heading.as_deref() != Some(crate::pack_routing::SECTION_HEADING)
+            && !shipped.iter().flatten().any(|base| {
+                base.key() == section.key()
+                    && crate::pack_routing::is_routing_for_disabled_skills(
+                        &base.text,
+                        &section.text,
+                    )
+            })
     });
     let moved = moved_text(&changes.changed, file_label);
     let moved_for_file = if crlf {
@@ -458,6 +470,32 @@ mod tests {
         let installed = format!("{BEGIN_MARKER}\n{edited}{END_MARKER}\n");
         let converted = convert(installed.as_bytes(), BASE_NEW, &[], "CLAUDE.md").unwrap();
         assert_eq!(converted.moved_sections, vec!["## Answer style", "## Mine"]);
+    }
+
+    #[test]
+    fn a_routing_section_written_for_disabled_skills_is_never_moved() {
+        let old = "# Rules\n\n## Skill routing\nUse skills.\n- Bugs: `diagnose`.\n- Tests: `tdd`.\n\n## Git\nNo force push.\n";
+        let new = old.replace("`tdd`.\n", "`tdd`.\n- Plans: `implementation-plan`.\n");
+        let bases = [KnownBase {
+            digest: stable_digest::bytes(old.as_bytes()),
+            text: old.to_string(),
+        }];
+        // Installed from the old base with `tdd` disabled, then the Git section edited.
+        let user = old
+            .replace("- Tests: `tdd`.\n", "")
+            .replace("No force push.", "Force push is fine.");
+        let installed = format!("{BEGIN_MARKER}\n{user}{END_MARKER}\n");
+        // The source now, with `tdd` still disabled and with it enabled again.
+        for source in [new.replace("- Tests: `tdd`.\n", ""), new.clone()] {
+            let converted = convert(installed.as_bytes(), &source, &bases, "CLAUDE.md").unwrap();
+            assert_eq!(converted.moved_sections, vec!["## Git"], "{source}");
+            assert!(converted.result.contains("`implementation-plan`"));
+        }
+        // A bullet the user edited is theirs, and the section moves like any other.
+        let edited = user.replace("- Bugs: `diagnose`.", "- Bugs and flakes: `diagnose`.");
+        let installed = format!("{BEGIN_MARKER}\n{edited}{END_MARKER}\n");
+        let converted = convert(installed.as_bytes(), &new, &bases, "CLAUDE.md").unwrap();
+        assert_eq!(converted.moved_sections, vec!["## Skill routing", "## Git"]);
     }
 
     #[test]

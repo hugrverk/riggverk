@@ -287,7 +287,9 @@ function canToggle(input: Pick<LibraryModelInput, "skillChoices" | "canToggleSki
 
 /** "named by ci-triage, security-review": the skills that point to `name`. */
 function namedByText(input: Pick<LibraryModelInput, "skillChoices">, name: string): string | undefined {
-  const by = input.skillChoices?.named_by[name] ?? [];
+  // An own-property check: a skill may be named like an inherited member ("constructor").
+  const namedBy = input.skillChoices?.named_by;
+  const by = namedBy && Object.prototype.hasOwnProperty.call(namedBy, name) ? namedBy[name] ?? [] : [];
   return by.length > 0 ? `named by ${by.join(", ")}` : undefined;
 }
 

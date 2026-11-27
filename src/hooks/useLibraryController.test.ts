@@ -1141,6 +1141,47 @@ describe("useLibraryController pack changes", () => {
     expect(result.current.agentTemplate?.content).not.toContain("`tdd`");
   });
 
+  // Each writes a pack's routing.md or changes the skills it may name, and the base template carries the routing lines.
+  it.each<[string, string, (lib: ReturnType<typeof useLibraryController>) => Promise<unknown>]>([
+    ["an import", "commit_skill_import", lib => lib.commitSkillImport("token", ["a"], {}, { 0: "When testing." })],
+    ["a routing change", "set_imported_skill_routing", lib => lib.setImportedSkillRouting("a", "When testing.")],
+    ["a removed import", "remove_imported_skill", lib => lib.removeImportedSkill("a")],
+    ["an undone import", "undo_last_import", lib => lib.undoLastImport()],
+    ["a copy into the personal pack", "copy_skill_to_pack", lib => lib.copySkillToPack("a", "a-mine")],
+  ])("reads the base template again after %s, so the pack's routing lines follow", async (_, command, change) => {
+    let changed = false;
+    const { result } = renderWithPackChanges(cmd => {
+      if (cmd === "read_agent_template") return Promise.resolve({ ...bundledDoc, content: changed ? "- Use `a`." : "" });
+      if (cmd === command) {
+        changed = true;
+        return Promise.resolve("done");
+      }
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+
+    await act(async () => result.current.loadAgentTemplate());
+    expect(result.current.agentTemplate?.content).not.toContain("`a`");
+    await act(async () => {
+      await change(result.current);
+    });
+
+    expect(result.current.agentTemplate?.content).toContain("`a`");
+  });
+
+  it("does not read a base template that was never opened after a pack change", async () => {
+    const { result } = renderWithPackChanges(cmd => {
+      if (cmd === "set_imported_skill_routing") return Promise.resolve("done");
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+
+    await act(async () => {
+      await result.current.setImportedSkillRouting("a", "When testing.");
+    });
+
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "read_agent_template")).toHaveLength(0);
+    expect(result.current.agentTemplate).toBeNull();
+  });
+
   it("does not read a base template that was never opened when a skill is enabled or disabled", async () => {
     const { result } = renderWithPackChanges(cmd => {
       if (cmd === "set_skills_enabled") return Promise.resolve(null);
