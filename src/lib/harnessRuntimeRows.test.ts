@@ -67,6 +67,17 @@ describe("runtimeRowsFor", () => {
     expect(runtimeVerdict({ harness: "codex", health: null })).toEqual({ text: "not loaded", tone: "dim" });
   });
 
+  it("shows central checked versions and omits an absent Cursor version", () => {
+    expect(runtimeRowsFor({ harness: "claude", health: { ...CLAUDE, checked_version: "2.1.323" } })).toContainEqual({ label: "checked with", value: "2.1.323", tone: "dim" });
+    const cursor = { status: "synced", profile_root: "", profile_root_source: "default", manifest_status: "current", legacy_permission_cleanup_status: "clean", workspace_resources_status: "synced", global_agents_count: 0, expected_global_agents_count: 0, global_agents_status: "synced", global_skills_count: 0, expected_global_skills_count: 0, global_skills_status: "synced", mcp_status: "synced", user_rules_status: "manual", next_action: "", warnings: [], checked_version: null } as CursorProfileHealth;
+    expect(runtimeRowsFor({ harness: "cursor", health: cursor }).find(item => item.label === "checked with")).toBeUndefined();
+  });
+
+  it("shows OpenCode's checked note only for 1.x", () => {
+    expect(row(rowsOf({ checked_version: "1.19.3" }), "cli")?.value).toBe("1.19.3 · paths checked with this version");
+    expect(row(rowsOf({ checked_version: "1.19.3", cli: { status: "compatible", version: "2.3.2", major: 2, detail: "" } }), "cli")?.value).toBe("2.3.2 · compatible");
+  });
+
   it("turns the Claude sync flags into rows and a verdict, which is not repeated as a row", () => {
     const rows = runtimeRowsFor({ harness: "claude", health: CLAUDE });
     expect(rows.map(row => [row.label, row.value, row.tone])).toEqual([
@@ -372,6 +383,11 @@ describe("light harness runtime rows", () => {
     expect(rows[1]).toEqual({ label: "rules", value: "synced", tone: "ok", wrap: false });
     expect(rows[2]).toEqual({ label: "mcp playwright", value: "synced · 0.0.83", tone: "ok", wrap: false });
     expect(rows[3]).toEqual({ label: "skills", value: "synced · 17/17", tone: "ok" });
+  });
+
+  it("shows Copilot's checked version beside its found CLI", () => {
+    const cli = { status: "found", version: "1.0.98", source: "path", detail: "", checked_version: "1.0.98" };
+    expect(runtimeRowsFor({ harness: "copilot", health: health({ harness: "copilot", cli }) })[0].value).toBe("1.0.98 · paths checked with this version");
   });
 
   it("says what is wrong with the Playwright entry in the mcp row", () => {

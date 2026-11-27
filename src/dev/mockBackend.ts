@@ -1279,6 +1279,7 @@ function codexHealth(): CodexRuntimeHealth {
   const overrideDetail = `${HOME}/.codex/AGENTS.override.md exists and replaces AGENTS.md; the Riggverk base block is not loaded until it is removed or emptied`;
   const status = fresh ? "missing" : "synced";
   return {
+    checked_version: "0.171.0",
     status,
     rules_status: status,
     rules_source_path: `${WORKSPACE}/templates/sync/codex-rules.md`,
@@ -1321,6 +1322,7 @@ function opencodeHealth(): OpenCodeRuntimeHealth {
   const installedSubagent = installedModelSelection.subagent_model || null;
   const installedCritic = installedModelSelection.critic_model || installedSubagent;
   return {
+    checked_version: "1.19.3",
     status,
     template_config_path: `${WORKSPACE}/templates/opencode.json`,
     installed_config_path: `${HOME}/.config/opencode/opencode.json`,
@@ -1364,6 +1366,7 @@ function cursorHealth(): CursorProfileHealth {
   const fresh = scenario === "fresh";
   const mcpConflict = surfaceStates.get("cursor_mcp") === "conflict";
   return {
+    checked_version: null,
     status: fresh ? "missing" : mcpConflict ? "diverged" : "synced",
     profile_root: `${HOME}/.cursor`,
     profile_root_source: "default",
@@ -1386,6 +1389,7 @@ function cursorHealth(): CursorProfileHealth {
 function claudeHealth(): ClaudeRuntimeHealth {
   const fresh = scenario === "fresh";
   return {
+    checked_version: "2.1.323",
     rules_synced: !fresh && surfaceStates.get("claude_rules") === "current",
     agents_synced: !fresh && surfaceStates.get("claude_agents") === "current",
     skills_synced: !fresh && surfaceStates.get("skills") === "current",
@@ -1466,14 +1470,14 @@ function lightHealthWithRules(harness: LightAgent): LightRuntimeHealth {
             : [];
   const cli: LightRuntimeHealth["cli"] =
     harness === "copilot"
-      ? { status: "found", version: "1.0.98", source: "path", detail: "Copilot 1.0.98" }
+      ? { status: "found", version: "1.0.98", source: "path", detail: "Copilot 1.0.98; paths checked with copilot 1.0.98", checked_version: "1.0.98" }
       : harness === "pi"
         ? { status: "missing", version: null, source: null, detail: "pi is not on PATH; Riggverk does not read your shell profile, so start it from a shell where pi runs" }
         : harness === "kilo"
-          ? { status: "found", version: "7.8.12", source: "nvm", detail: "Kilo 7.8.12 (found in nvm v24.14.0, not on PATH)" }
+          ? { status: "found", version: "7.8.12", source: "nvm", detail: "Kilo 7.8.12 (found in nvm v24.14.0, not on PATH); paths checked with kilo 7.8.12", checked_version: "7.8.12" }
           : harness === "grok"
             ? { status: "found", version: "0.4.2", source: "path", detail: "Grok 0.4.2" }
-            : { status: "found", version: "1.5.15", source: "path", detail: "Antigravity 1.5.15; paths checked with agy 1.5.15", checked_version: "1.5.15" };
+            : { status: "found", version: "1.5.18", source: "path", detail: "Antigravity 1.5.18; paths checked with agy 1.5.18", checked_version: "1.5.18" };
   const mcpSurface = `${harness}_mcp` as (typeof LIGHT_MCP_SURFACES)[number];
   const mcpState = surfaceStates.get(mcpSurface) ?? "not_installed";
   const mcpOn = settings.enabled_target_ids.includes(mcpSurface);

@@ -69,6 +69,7 @@ function codexRows(health: CodexRuntimeHealth): KvItem[] {
   // The AGENTS.override.md warning has its own alert on the Codex page; the warnings row would repeat it.
   const override = health.checks?.find(check => check.id === "rules_override" && check.status === "warn")?.detail;
   return [
+    ...textRow("checked with", health.checked_version, { tone: "dim" }),
     statusRow("rules", health.rules_status),
     { label: "agents", value: `${runtimeChipLabel(health.agents_status).toLowerCase()} · ${health.installed_bundled_agent_count}/${health.bundled_agent_count}`, tone: toneOf(health.agents_status) },
     { label: "skills", value: `${runtimeChipLabel(health.skills_status).toLowerCase()} · ${health.skills_synced_count}/${health.skills_expected_count}`, tone: toneOf(health.skills_status) },
@@ -81,10 +82,10 @@ function codexRows(health: CodexRuntimeHealth): KvItem[] {
 }
 
 /** The CLI version, or why there is none. An unsupported major's full explanation is in the warnings. */
-function opencodeCliRow(cli: OpenCodeCliHealth | null): KvItem[] {
+function opencodeCliRow(cli: OpenCodeCliHealth | null, checked: string | null | undefined): KvItem[] {
   if (!cli) return [];
   switch (cli.status) {
-    case "supported": return [{ label: "cli", value: cli.version ?? "found", tone: "ok" }];
+    case "supported": return [{ label: "cli", value: `${cli.version ?? "found"}${cli.major === 1 ? checkedNote({ version: cli.version, checked_version: checked }) : ""}`, tone: "ok" }];
     case "compatible": return [{ label: "cli", value: `${cli.version ?? "unknown"} · compatible`, tone: "ok" }];
     case "unsupported": return [{ label: "cli", value: `${cli.version ?? "unknown"} · unsupported`, tone: "warn" }];
     case "missing": return [{ label: "cli", value: cli.detail, tone: "warn", wrap: true }];
@@ -140,7 +141,7 @@ function opencodePlaywrightRow(health: OpenCodeRuntimeHealth): KvItem {
 
 function opencodeRows(health: OpenCodeRuntimeHealth): KvItem[] {
   return [
-    ...opencodeCliRow(health.cli),
+    ...opencodeCliRow(health.cli, health.checked_version),
     ...textRow("default agent", health.default_agent),
     ...textRow("autoupdate", health.autoupdate),
     statusRow("rules", health.rules_status),
@@ -158,6 +159,7 @@ function opencodeRows(health: OpenCodeRuntimeHealth): KvItem[] {
 
 function cursorRows(health: CursorProfileHealth): KvItem[] {
   return [
+    ...textRow("checked with", health.checked_version, { tone: "dim" }),
     { label: "profile", value: health.profile_root },
     statusRow("workspace", health.workspace_resources_status),
     { label: "agents", value: `${health.global_agents_count}/${health.expected_global_agents_count}`, tone: toneOf(health.global_agents_status) },
@@ -170,7 +172,7 @@ function cursorRows(health: CursorProfileHealth): KvItem[] {
 }
 
 /** The version the harness's folders were checked with, beside the found one; the backend warns when the found one is older. */
-function checkedNote(cli: LightCliHealth): string {
+function checkedNote(cli: Pick<LightCliHealth, "version" | "checked_version">): string {
   if (!cli.checked_version) return "";
   return cli.checked_version === cli.version ? " · paths checked with this version" : ` · paths checked with ${cli.checked_version}`;
 }
@@ -227,6 +229,7 @@ function lightRows(health: LightRuntimeHealth): KvItem[] {
 
 function claudeRows(health: ClaudeRuntimeHealth): KvItem[] {
   return [
+    ...textRow("checked with", health.checked_version, { tone: "dim" }),
     flagRow("rules", health.rules_synced),
     { label: "agents", value: `${health.agents_synced ? "synced" : "diverged"} · ${health.installed_agent_count}/${health.expected_agent_count}`, tone: health.agents_synced ? "ok" : "warn" },
     flagRow("skills", health.skills_synced),
