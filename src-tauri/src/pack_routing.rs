@@ -390,6 +390,23 @@ fn without_disabled_routing(base: &str, disabled: &BTreeSet<String>) -> String {
     out
 }
 
+/// Whether `section` is `base` (one section of a bundled base, heading included) as [`compose`]
+/// writes it for some non-empty list of disabled skills, whichever list that was: the skills the
+/// bullets of `base` name and those of `section` do not are that list.
+pub(crate) fn is_routing_for_disabled_skills(base: &str, section: &str) -> bool {
+    let named = |text: &str| -> BTreeSet<String> {
+        text.lines()
+            .filter(|line| line.starts_with("- "))
+            .flat_map(|line| backticked(line).unwrap_or_default())
+            .map(str::to_string)
+            .collect()
+    };
+    let gone: BTreeSet<String> = named(base).difference(&named(section)).cloned().collect();
+    !gone.is_empty()
+        && without_disabled_routing(base, &gone).trim_end()
+            == section.replace("\r\n", "\n").trim_end()
+}
+
 /// The rules text of a bundled base: its routing to `disabled` skills left out, the packs' routing
 /// `section` spliced in (see [`splice`]), then the section of the `answers` style after the
 /// `## Communication` section and the section of the `comments` policy after the `## Scope`

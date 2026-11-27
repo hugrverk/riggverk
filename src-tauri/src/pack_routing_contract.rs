@@ -348,18 +348,29 @@ mod tests {
     /// A bundled skill a bullet of the base's routing section names, read from the text rather than
     /// assumed, so the test holds whatever the routing says.
     fn routed_bundled_skill(env: &Env) -> String {
+        routed_bundled_skills(env)
+            .into_iter()
+            .next()
+            .expect("the base routes to a bundled skill")
+    }
+
+    /// Every bundled skill a bullet of the base's routing section names, in the order of the bullets.
+    fn routed_bundled_skills(env: &Env) -> Vec<String> {
         let catalog = env.sources().catalog().expect("catalog");
         let base = bundled_text(&ArtifactId::ClaudeRules);
-        base_routing_lines(&base)
-            .into_iter()
-            .filter(|line| line.starts_with("- "))
-            .find_map(|line| {
-                catalog
-                    .iter()
-                    .map(|entry| entry.skill.name.clone())
-                    .find(|name| line.contains(&format!("`{name}`")))
-            })
-            .expect("the base routes to a bundled skill")
+        let mut names: Vec<String> = Vec::new();
+        for line in base_routing_lines(&base) {
+            if !line.starts_with("- ") {
+                continue;
+            }
+            for entry in &catalog {
+                let name = &entry.skill.name;
+                if line.contains(&format!("`{name}`")) && !names.contains(name) {
+                    names.push(name.clone());
+                }
+            }
+        }
+        names
     }
 
     fn disable(env: &Env, names: &[&str]) {
@@ -782,5 +793,84 @@ mod tests {
             block.contains("- Canvas work: `my-canvas`."),
             "the block gets the routing composed now"
         );
+    }
+
+    /// Disable `first`, install, edit the `## Evidence` section by hand (and append `own` to the
+    /// `## Skill routing` section when given), change the disabled list to `now`, and preview the
+    /// conversion of CLAUDE.md: its moved sections and the file it would write.
+    fn convert_after_a_changed_disabled_list(
+        label: &str,
+        first: &str,
+        now: &[&str],
+        own: Option<&str>,
+    ) -> (Vec<String>, String) {
+        let env = Env::new(label);
+        disable(&env, &[first]);
+        env.apply(&["claude_rules"]);
+        let before = env.read_claude();
+        let mut edited = before.replacen("Cite code as file:line.", "Cite code as path:line.", 1);
+        if let Some(own) = own {
+            edited = edited.replacen("\n\n## Task flow", &format!("\n{own}\n\n## Task flow"), 1);
+        }
+        assert_ne!(before, edited);
+        fs::write(env.claude_file(), edited).expect("edit");
+        crate::disabled_skills::set(&env.ws, &[first.to_string()], true).expect("enable");
+        disable(&env, now);
+        let preview = crate::commands::preview_rules_conversion("claude_rules".into())
+            .expect("conversion preview");
+        assert!(preview.applicable, "{label}: {:?}", preview.reason);
+        (preview.moved_sections, preview.result)
+    }
+
+    #[test]
+    fn a_conversion_leaves_out_base_routing_written_for_another_disabled_list() {
+        let skills = {
+            let env = Env::new("convert-routing-names");
+            routed_bundled_skills(&env)
+        };
+        let [first, second, ..] = skills.as_slice() else {
+            panic!("the base routes to two bundled skills: {skills:?}");
+        };
+        let named = |text: &str, name: &str| text.contains(&format!("`{name}`"));
+        // The same list as at the install, a second skill disabled since, and the first enabled again.
+        for (label, now) in [
+            ("convert-routing-same", vec![first.as_str()]),
+            (
+                "convert-routing-more",
+                vec![first.as_str(), second.as_str()],
+            ),
+            ("convert-routing-none", vec![]),
+        ] {
+            let (moved_sections, result) =
+                convert_after_a_changed_disabled_list(label, first, &now, None);
+            assert_eq!(moved_sections, vec!["## Evidence"], "{label}");
+            let (block, moved) = result
+                .split_once(crate::rules_block::END_MARKER)
+                .expect("END marker");
+            assert!(
+                moved.contains("Cite code as path:line."),
+                "{label}: {moved}"
+            );
+            for name in [first, second] {
+                let disabled = now.contains(&name.as_str());
+                assert_eq!(named(&result, name), !disabled, "{label}: {name}");
+                assert_eq!(named(block, name), !disabled, "{label}: {name}");
+            }
+        }
+
+        // A bullet the user added to the section is theirs: the section moves like any other.
+        let own = "- My own review step: `diagnose` first.";
+        let (moved_sections, result) = convert_after_a_changed_disabled_list(
+            "convert-routing-own",
+            first,
+            &[first.as_str()],
+            Some(own),
+        );
+        assert_eq!(moved_sections, vec!["## Skill routing", "## Evidence"]);
+        let moved = result
+            .split_once(crate::rules_block::END_MARKER)
+            .expect("END marker")
+            .1;
+        assert!(moved.contains(own), "{moved}");
     }
 }
