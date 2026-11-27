@@ -1157,6 +1157,32 @@ describe("Library disabled skills", () => {
     expect(bundledSection().getAllByRole("button", { name: "Read" })).toHaveLength(BUNDLED_SKILLS.length);
   });
 
+  it("lists a disabled pack skill whose name is also an object property", async () => {
+    fixture.packs.skills.push({
+      ...fixture.packs.skills[0]!,
+      id: "pack:mine/constructor",
+      name: "constructor",
+      path: "constructor/SKILL.md",
+    });
+    fixture.choices = { disabled: [{ name: "constructor", source: "pack:mine", installed: false }], named_by: {}, problem: null };
+    await renderLibrary({ topic: "skills" });
+    expect(within(rowOf("constructor")).getByRole("button", { name: "Enable" })).toBeTruthy();
+  });
+
+  it("names no referring skills when disabling a skill whose name is also an object property", async () => {
+    fixture.packs.skills.push({
+      ...fixture.packs.skills[0]!,
+      id: "pack:mine/constructor",
+      name: "constructor",
+      path: "constructor/SKILL.md",
+    });
+    await renderLibrary({ topic: "skills" });
+    const disable = await waitFor(() => within(rowOf("constructor")).getByRole("button", { name: "Disable" }));
+    fireEvent.click(disable);
+    const dialog = await screen.findByRole("dialog", { name: "Disable constructor?" });
+    expect(dialog.textContent).not.toContain("Named by");
+  });
+
   it("says how many routing lines a disabled skill leaves out", async () => {
     fixture.packs.packs[0] = { ...fixture.packs.packs[0]!, routing: ["- Checklists: `my-checklist`."], routing_left_out: 1 };
     await renderLibrary();

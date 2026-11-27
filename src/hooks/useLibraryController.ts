@@ -886,7 +886,9 @@ export function useLibraryController({
     if (!enabled) {
       const list = names.join(", ");
       const one = names.length === 1;
-      const namedBy = [...new Set(names.flatMap(name => skillChoices?.named_by[name] ?? []))]
+      // Own properties only: a skill may be named like an inherited member ("constructor").
+      const referrers = skillChoices?.named_by;
+      const namedBy = [...new Set(names.flatMap(name => (referrers && Object.prototype.hasOwnProperty.call(referrers, name) ? referrers[name] ?? [] : [])))]
         .filter(name => !names.includes(name))
         .sort();
       const ok = await confirm({
