@@ -8,6 +8,7 @@ mod app_update;
 mod apply_progress;
 mod artifact_registry;
 mod claude_settings;
+mod cli;
 mod codex_config_keep;
 mod commands;
 mod comment_policy;
@@ -140,8 +141,11 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    executable_resolver::extend_path_with_tool_dirs();
     let context = tauri::generate_context!();
+    if let Some(code) = cli::run(std::env::args_os().skip(1), &context) {
+        std::process::exit(code);
+    }
+    executable_resolver::extend_path_with_tool_dirs();
     let dev_url = context.config().build.dev_url.clone();
     // The updater plugin exists only in a build whose config turns updates on (see app_update); otherwise the app
     // has no updater and makes no network request.

@@ -85,6 +85,28 @@ fn run(home: &Path) -> Result<Outcome, String> {
     migrate(&mac_env(home), Platform::MacOS, &real_rename)
 }
 
+#[test]
+fn pending_move_matches_startup_rules() {
+    let temp = TempDir::new("pending");
+    let (old, new) = old_and_new(temp.path());
+    let pending =
+        || crate::app_data_migration::pending(&mac_env(temp.path()), Platform::MacOS).unwrap();
+    assert!(!pending());
+    fs::create_dir_all(&old).unwrap();
+    assert!(pending());
+    fs::create_dir_all(&new).unwrap();
+    assert!(pending());
+    fs::write(new.join("settings"), b"test").unwrap();
+    assert!(!pending());
+    fs::remove_dir_all(&new).unwrap();
+    fs::remove_dir_all(&old).unwrap();
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(temp.path(), &old).unwrap();
+        assert!(!pending());
+    }
+}
+
 fn write(path: &Path, bytes: &[u8]) {
     fs::create_dir_all(path.parent().expect("parent")).expect("create parent");
     fs::write(path, bytes).expect("write file");
