@@ -12,7 +12,7 @@ The app keeps no copy of the bundle in the data folder, and Install never writes
 
 ## Data folder
 
-The data folder holds only the app's state, in `.riggverk/` (`managed-state.json` ownership records, `kept-files.json`, `pack-skills.json`, `disabled-skills.json`, `comment-policy.json`, `answer-style.json`, `rules-preferences.json`, `config-preferences.json`, and the `workspace.json` marker where an earlier release wrote it: never removed, not created for new users), and your text: personal docs in `docs/context/` and skill packs in `packs/` (see Skill packs). Whether it is usable depends on the folder itself, never on bundle files in it:
+The data folder holds only the app's state, in `.riggverk/` (`managed-state.json` ownership records, `kept-files.json`, `pack-skills.json`, `disabled-skills.json`, `comment-policy.json`, `answer-style.json`, `decision-style.json`, `rules-preferences.json`, `config-preferences.json`, and the `workspace.json` marker where an earlier release wrote it: never removed, not created for new users), and your text: personal docs in `docs/context/` and skill packs in `packs/` (see Skill packs). Whether it is usable depends on the folder itself, never on bundle files in it:
 
 - The default folder (`~/.config/riggverk`) is usable when it is absent (a fresh profile) or a real directory. A harness can be installed with no data folder yet.
 - A `RIGGVERK_WORKSPACE_PATH` folder must be an existing real directory.
@@ -171,6 +171,13 @@ How agents word their answers is one choice for every harness, in Library → Ru
 - **Storage.** `.riggverk/answer-style.json` (schema 1: `{"schema_version":1,"level":"harness_default"|"plain"}`, at most 4 KiB), written atomically through `safe_filesystem` by a command that holds the mutation lock and the setup guard, and not written when the level would not change (choosing Harness default with no file writes nothing). It is a choice outside any transaction, like `comment-policy.json`: an undo restores the previous block but the level stays, and uninstall never deletes the file.
 - **Conversion.** Converting a hand-edited rules file never moves a `## Answer style` section exactly as Plain writes it below the END marker: the new block carries the level chosen now. A section the user edited is their text and moves like any other.
 - **A file the app cannot use fails closed.** When `answer-style.json` exists but is not a regular file, is a link, is too big, is not JSON, lacks the level or holds an unknown one, or was written by another schema, every rules surface is unavailable (`Claude rules unavailable: answer-style.json cannot be read; fix or remove it`, or the other-version phrase), health is not synced, the Library's base template and the Cursor User Rules say why instead of showing a text without the style, the Library refuses every level, and the file is never overwritten. Skills do not read it. Uninstall ignores it.
+
+## Decisions
+
+How agents put the decisions that are the user's to make is one choice for every harness, in Library → Rules → **Decisions**, right under Answer style (`set_decision_style(level)`; `get_decision_style` reads it): **Harness default** (the default) or **As questions**. It works like the answer style in every respect below except the section and its place.
+
+- **Composition.** Harness default adds nothing: every rules source stays the bundled base byte for byte. As questions adds one `## Decisions` section, the same text for every harness, right after the `## Answer style` section when the answer style adds one, otherwise right after the base's `## Communication` section (at the end of a base without one), through the same composition (`pack_routing::compose`). The text asks agents to put a decision that is the user's as a question with two to four answers, the recommended one first and one line each on what it leads to, through the harness's question tool when it has one; to ask independent questions together and carry on with work that does not depend on the answer; and not to ask what can be looked up or decided by convention.
+- **Update, storage, conversion and a file the app cannot use** as for the answer style, with `.riggverk/decision-style.json` (schema 1: `{"schema_version":1,"level":"harness_default"|"as_questions"}`, at most 4 KiB), a `## Decisions` section exactly as As questions writes it never moved by a conversion, and the phrase `decision-style.json cannot be read; fix or remove it` (or the other-version phrase).
 
 ## Skill ownership and cleanup
 
