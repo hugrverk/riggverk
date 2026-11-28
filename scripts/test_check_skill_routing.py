@@ -382,9 +382,9 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.edit(script, "CATALOG_DESCRIPTION_BUDGET = 8000", "CATALOG_DESCRIPTION_BUDGET = 100")
         self.assert_fails("skill descriptions total")
 
-    def test_user_invoked_skill_in_routing_bullet_fails(self) -> None:
+    def test_on_request_skill_in_routing_bullet_fails(self) -> None:
         self.edit(self.tree / WS / "templates/rules/claude.md", "## Claude harness\n", "## Claude harness\n\n- Retrospectives: `retro`.\n")
-        self.assert_fails("names user-invoked skill `retro`")
+        self.assert_fails("names on-request skill `retro`")
 
     def test_user_invoked_flag_on_routed_skill_fails(self) -> None:
         # zoom-out is routed by the global rules; hiding it from the model would be a contradiction.

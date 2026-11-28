@@ -2,7 +2,6 @@
 name: raise-the-bar
 description: Proposes a higher bar for a task and stops for the user to pick. Use when explicitly asked (/raise-the-bar), never unasked.
 license: MIT
-disable-model-invocation: true
 metadata:
   category: planning
   risk: low
@@ -19,7 +18,7 @@ Done when: the goal as asked, the outcome it serves and at most three bounded op
 
 ## Invocation
 
-Run only on an explicit request: `/raise-the-bar`, `$raise-the-bar` in Codex, or "raise the bar on this". Claude Code and Cursor honour `disable-model-invocation` and Codex reads `agents/openai.yaml`; OpenCode and the light harnesses ignore both, so keep the rule yourself and never start this because a task looks small.
+Run only on an explicit request: `/raise-the-bar`, `$raise-the-bar` in Codex, or "raise the bar on this". The model can see this skill so that plain words can start it (Codex reads `agents/openai.yaml` and takes only `$raise-the-bar`); never start it because a task looks small.
 
 The task is what follows the invocation, else the user's latest request. If there is none, ask for it in one line and stop.
 

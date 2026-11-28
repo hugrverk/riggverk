@@ -2,7 +2,6 @@
 name: grill-me
 description: Interview the user to sharpen an idea, plan, or design. Use when explicitly asked to grill them; never start on your own. Not for writing an implementation plan or building a prototype.
 license: MIT
-disable-model-invocation: true
 metadata:
   category: workflow
   risk: low
@@ -19,7 +18,7 @@ Done when: the user ends the interview or the decision tree is settled, and a sh
 
 ## Invocation
 
-Run only on an explicit request, such as `/grill-me`, `$grill-me`, "grill me on this", or "grilla mig". Some harnesses ignore `disable-model-invocation`; in those harnesses keep the same rule yourself and never start this interview on your own.
+Run only on an explicit request, such as `/grill-me`, `$grill-me`, "grill me on this", or "grilla mig". The model can see this skill so that plain words can start it; never start this interview on your own.
 
 ## Interview
 

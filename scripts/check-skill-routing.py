@@ -85,7 +85,7 @@ REQUIRED_SUPPORT_FILES = {
     "adversarial-review": ("adversarial-roles.md", "critic-recipes.md"),
     "adversarial-test": ("adversarial-roles.md", "critic-recipes.md"),
 }
-# Codex ignores `disable-model-invocation`; its own per-skill policy file keeps these skills explicit-only.
+# Codex starts these skills only on an explicit `$name`: its own per-skill policy file says so.
 CODEX_POLICY_SKILLS = ("retro", "grill-me", "raise-the-bar")
 CODEX_POLICY_FILE = "agents/openai.yaml"
 CODEX_POLICY_TEXT = "policy:\n  allow_implicit_invocation: false\n"
@@ -372,8 +372,16 @@ def rules_files() -> list[Path]:
 
 # Skills that start only when the user asks for them in plain words or by slash command.
 # The model may invoke them, so disable-model-invocation does not mark them; the rules
-# must still never route to them, since each run spends several agents.
-ON_REQUEST_SKILLS = ("adversarial-implementation", "adversarial-review", "adversarial-test", "orchestrate")
+# must still never route to them: a run spends several agents or starts an interview nobody asked for.
+ON_REQUEST_SKILLS = (
+    "adversarial-implementation",
+    "adversarial-review",
+    "adversarial-test",
+    "grill-me",
+    "orchestrate",
+    "raise-the-bar",
+    "retro",
+)
 
 
 def validate_user_invoked_routing(discovered: dict[str, Path]) -> None:
