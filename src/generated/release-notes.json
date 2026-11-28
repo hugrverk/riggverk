@@ -1,6 +1,34 @@
 {
   "releases": [
     {
+      "version": "2026.11.14",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Support tiers. Codex, OpenCode, Antigravity and Claude Code are primary: the agents Riggverk checks and fixes first. Cursor, Copilot, Pi, Kilo and Grok are best effort: supported, with new versions of them checked later. The sidebar and Settings list the primary agents first, and a best-effort agent carries a quiet tag. Digits 2 to 5 open Codex, OpenCode, Antigravity and Claude; Cursor opens from the sidebar or with `:cursor`. The tier is a label: it changes neither which agents are on by default nor what Riggverk writes",
+            "Each agent's page shows the CLI version its paths were last checked with, where one is recorded. A warning appears only when the installed CLI is older than the oldest version those paths hold for",
+            "Final report: the rules ask for two headings (Changed, Verified) after a small change of one file and one step, and for all five headings after larger work",
+            "The Linux packages are built by a GitHub Actions workflow and attested there. A release takes them only when the attestation names that workflow and the release commit"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "OpenCode: the repo-scout, inspector, sentinel and scribe agents and the built-in explore agent have no bash tool. Until now they had one in which every command was denied, and on OpenCode 1.x a line that holds only a redirection matches no rule and runs. The docs state that limit for the agents that keep a shell",
+            "Codex: the critic recipes of the adversarial skills and the `delegate` recipe pass `approval_policy=\"never\"`. With an automatic approvals reviewer in your Codex config, a run started in a read-only sandbox could otherwise have an escalation approved and write files",
+            "Rules conversion: `## Skill routing` stays in the managed block when it differs only because the list of disabled skills changed since Riggverk wrote it. It used to move below END, where no update reached it",
+            "Library: the Managed base preview follows an import, a routing change, a removed or undone import and a copy into your personal pack without a reload",
+            "Library → Skills opens when a pack holds a skill named like `constructor`",
+            "Codex config: when the search for a Python that reads TOML runs out of time, Riggverk searches again at the next step, up to three times. It used to report \"Python 3.11 or newer is needed\" until a restart",
+            "Antigravity: skills are installed into `~/.gemini/config/skills` only. The CLI also reads `~/.gemini/antigravity-cli/skills`, so it got every skill twice. The next Update removes Riggverk's copies from that folder with a backup and leaves your own",
+            "Antigravity: `delegate` and `orchestrate` no longer say that it has no subagents, and its rules name `~/.gemini/config/agents/` as the folder for your own subagents",
+            "Antigravity: the docs and its rules note that `agy` reads `~/.agents/skills` from 1.5.16, and that a copy in `~/.gemini` wins a name"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.13",
       "sections": [
         {

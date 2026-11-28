@@ -944,6 +944,21 @@ class ReleaseShTests(unittest.TestCase):
         self.assertFalse(self.gh_log.exists())
         self.assertFalse((self.repo / "release").exists())
 
+    def test_build_linux_for_ci_refuses_a_version_that_is_already_released(self) -> None:
+        # main before the release pull request is merged still holds the version that is out.
+        self.merge_release_pr(NEXT)
+        self.git("tag", f"v{NEXT}")
+        self.git("push", "-q", "origin", f"v{NEXT}")
+        out = Path(self._tmp.name) / "ci-out"
+
+        self.git("switch", "-q", "--detach")
+        result = self.release("build-linux", "--ci", str(out), HOME=str(Path(self._tmp.name) / "no-home"))
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"v{NEXT} is already released", result.stderr)
+        self.assertFalse(self.linux_build_log.exists())
+        self.assertFalse(out.exists() and any(out.iterdir()))
+
     def test_build_linux_for_ci_refuses_a_folder_that_holds_something(self) -> None:
         self.merge_release_pr(NEXT)
         out = Path(self._tmp.name) / "ci-out"
