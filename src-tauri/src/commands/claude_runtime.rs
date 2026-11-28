@@ -1,7 +1,9 @@
 //! Claude Code runtime health and administration boundary.
 //!
 //! This module provides read-only health checks for managed Claude surfaces:
-//! rules, native agents, and skills.  It does NOT inspect:
+//! rules, native agents, and skills. Of every skill in `~/.claude/skills` it also reads the
+//! frontmatter, to count how large Claude Code's skill listing is; only counts leave it.
+//! It does NOT inspect:
 //!   - authentication state or tokens
 //!   - trust databases or caches
 //!   - session state
@@ -12,12 +14,13 @@
 //! Claude settings and MCP configuration remain an explicit manual boundary
 //! (see the Claude UI "Settings and MCP" card).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
 use crate::agent_targets;
 use crate::commands::status::file_eq;
+use crate::skill_discovery::{frontmatter_fields, read_skill_md_capped};
 use crate::skill_health::{skill_files_status, SkillFilesStatus};
 use crate::skill_roots::SkillRoot;
 use crate::skill_sources::SkillSources;
@@ -42,8 +45,95 @@ pub struct ClaudeRuntimeHealth {
     pub installed_skill_count: usize,
     /// Claude CLI availability (binary found in PATH).
     pub claude_cli_available: bool,
+    /// How large the listing of the skills in `~/.claude/skills` is; `None` without that folder.
+    pub skill_listing: Option<SkillListing>,
     /// Human-readable summary for the UI.
     pub summary: String,
+}
+
+/// The size of what Claude Code tells the model about the skills in `~/.claude/skills`. Counts
+/// only: no text of a skill is kept.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct SkillListing {
+    /// Skills the model is told about (not those with `disable-model-invocation: true`).
+    pub skills: usize,
+    /// Characters of their frontmatter `name`, `description` and `when_to_use`, summed.
+    pub characters: usize,
+}
+
+/// A directory itself, not a link to one.
+fn real_dir(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|meta| meta.is_dir())
+}
+
+/// The folders directly below `dir` that are real directories, dot folders left out.
+fn child_dirs(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .map(|entry| entry.path())
+        .collect()
+}
+
+/// The characters this skill adds to the listing, or `None` when Claude Code does not list it to
+/// the model (`disable-model-invocation: true`) or its `SKILL.md` is not a regular file that can
+/// be read. Frontmatter the strict reader refuses counts as empty, so the skill still counts with
+/// its folder name: Claude Code names a skill without `name` after its folder.
+fn listing_characters(dir: &Path) -> Option<usize> {
+    let skill_md = dir.join("SKILL.md");
+    if !std::fs::symlink_metadata(&skill_md).is_ok_and(|meta| meta.is_file()) {
+        return None;
+    }
+    let fields = frontmatter_fields(&read_skill_md_capped(&skill_md).ok()?).unwrap_or_default();
+    let field = |key: &str| fields.get(key).filter(|value| !value.is_empty());
+    if field("disable-model-invocation").is_some_and(|value| value.eq_ignore_ascii_case("true")) {
+        return None;
+    }
+    let name = field("name").map_or_else(
+        || {
+            dir.file_name()
+                .map_or(0, |name| name.to_string_lossy().chars().count())
+        },
+        |name| name.chars().count(),
+    );
+    let rest: usize = ["description", "when_to_use"]
+        .iter()
+        .filter_map(|key| field(key))
+        .map(|value| value.chars().count())
+        .sum();
+    Some(name + rest)
+}
+
+/// The listing of `~/.claude/skills/<name>` and `~/.claude/skills/synced/<name>` (and, for
+/// skills synced per account, `synced/<account>/<name>`). No link is followed, at any level.
+fn skill_listing(home: &Path) -> Option<SkillListing> {
+    let root = home.join(".claude/skills");
+    if !real_dir(&root) || std::fs::read_dir(&root).is_err() {
+        return None;
+    }
+    let mut dirs = child_dirs(&root);
+    let synced = root.join("synced");
+    if real_dir(&synced) {
+        for dir in child_dirs(&synced) {
+            if std::fs::symlink_metadata(dir.join("SKILL.md")).is_ok() {
+                dirs.push(dir);
+            } else {
+                dirs.extend(child_dirs(&dir));
+            }
+        }
+    }
+    let counted: Vec<usize> = dirs
+        .iter()
+        .filter_map(|dir| listing_characters(dir))
+        .collect();
+    Some(SkillListing {
+        skills: counted.len(),
+        characters: counted.iter().sum(),
+    })
 }
 
 /// Check whether the `claude` CLI is on PATH using the cross-platform executable resolver.
@@ -163,9 +253,9 @@ fn claude_skills(
     .ok()
 }
 
-/// Compute Claude runtime health from inspected managed surfaces only. Rules, agents and skills
-/// are installed from the app's bundle, so that is what the installed files are compared with;
-/// the workspace folder plays no part.
+/// Compute Claude runtime health from inspected managed surfaces, plus the skill listing counts.
+/// Rules, agents and skills are installed from the app's bundle, so that is what the installed
+/// files are compared with; the workspace folder plays no part.
 fn compute_health(home: &Path, workspace_root: Option<&Path>) -> ClaudeRuntimeHealth {
     let bundled = crate::setup_roots::bundled_root().ok();
     compute_health_with_bundle(bundled.as_deref(), workspace_root, home)
@@ -235,13 +325,15 @@ fn compute_health_with_bundle(
         expected_skill_count,
         installed_skill_count,
         claude_cli_available: cli_ok,
+        skill_listing: skill_listing(home),
         summary,
     }
 }
 
 /// Read-only Claude runtime health check.
 ///
-/// Inspects only managed surfaces.  Does not read auth state, tokens,
+/// Inspects managed surfaces, and the frontmatter of the skills in `~/.claude/skills` for the
+/// listing counts.  Does not read auth state, tokens,
 /// trust databases, caches, session state, settings file contents,
 /// MCP credentials, or private environment values.
 #[tauri::command]
@@ -586,5 +678,94 @@ mod tests {
         assert_eq!(incomplete.installed_skill_count, 1);
         write_file(&home.join(".claude/skills/claude-skill/notes.md"), "notes");
         assert!(health_of(&ws, &home).skills_synced);
+    }
+
+    #[test]
+    fn health_counts_the_skill_listing_of_the_personal_skills_folder() {
+        let home = temp_dir("claude-listing");
+        let ws = temp_dir("claude-listing-ws");
+        let skills = home.join(".claude/skills");
+        // name 5 + description 7 ("Ünicode" is seven characters, eight bytes).
+        write_file(
+            &skills.join("alpha/SKILL.md"),
+            "---\nname: alpha\ndescription: Ünicode\n---\n# Alpha body is not counted\n",
+        );
+        // name 5 + description 4 + when_to_use 10.
+        write_file(
+            &skills.join("gamma/SKILL.md"),
+            "---\nname: gamma\ndescription: Does\nwhen_to_use: When asked\n---\nbody\n",
+        );
+        // Below synced/: name 4 + description 6.
+        write_file(
+            &skills.join("synced/beta/SKILL.md"),
+            "---\nname: beta\ndescription: Synced\n---\n",
+        );
+        // Synced per account, one level deeper: name 5 + description 7.
+        write_file(
+            &skills.join("synced/account/delta/SKILL.md"),
+            "---\nname: delta\ndescription: Account\n---\n",
+        );
+        // Without `name`, the folder name: 7 + description 7.
+        write_file(
+            &skills.join("epsilon/SKILL.md"),
+            "---\ndescription: No name\n---\n",
+        );
+        // Not listed to the model.
+        write_file(
+            &skills.join("manual/SKILL.md"),
+            "---\nname: manual\ndescription: Only by hand\ndisable-model-invocation: true\n---\n",
+        );
+        // No SKILL.md: not a skill.
+        write_file(&skills.join("notes/README.md"), "notes");
+
+        let listing = health_of(&ws, &home).skill_listing;
+        assert_eq!(
+            listing,
+            Some(SkillListing {
+                skills: 5,
+                characters: 12 + 19 + 10 + 12 + 14,
+            })
+        );
+    }
+
+    #[test]
+    fn health_has_no_skill_listing_without_a_skills_folder() {
+        let home = temp_dir("claude-listing-none");
+        let ws = temp_dir("claude-listing-none-ws");
+        fs::create_dir_all(home.join(".claude")).expect("create .claude");
+        assert_eq!(health_of(&ws, &home).skill_listing, None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn health_skill_listing_does_not_follow_symlinks() {
+        use std::os::unix::fs::symlink;
+        let home = temp_dir("claude-listing-link");
+        let ws = temp_dir("claude-listing-link-ws");
+        let outside = temp_dir("claude-listing-link-outside");
+        write_file(
+            &outside.join("linked/SKILL.md"),
+            "---\nname: linked\ndescription: Outside\n---\n",
+        );
+        let skills = home.join(".claude/skills");
+        write_file(
+            &skills.join("real/SKILL.md"),
+            "---\nname: real\ndescription: Here\n---\n",
+        );
+        symlink(outside.join("linked"), skills.join("linked")).expect("link a skill folder");
+        fs::create_dir_all(skills.join("file-link")).expect("create folder");
+        symlink(
+            outside.join("linked/SKILL.md"),
+            skills.join("file-link/SKILL.md"),
+        )
+        .expect("link a SKILL.md");
+
+        assert_eq!(
+            health_of(&ws, &home).skill_listing,
+            Some(SkillListing {
+                skills: 1,
+                characters: 8,
+            })
+        );
     }
 }

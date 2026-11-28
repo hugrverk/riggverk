@@ -6,7 +6,7 @@ import type {
   LightRuntimeHealth,
   OpenCodeRuntimeHealth,
 } from "../types";
-import { runtimeRowsFor, runtimeVerdict } from "./harnessRuntimeRows";
+import { CLAUDE_SKILL_LISTING_SETTING, offersSkillListingBudget, runtimeRowsFor, runtimeVerdict } from "./harnessRuntimeRows";
 
 const CLAUDE: ClaudeRuntimeHealth = {
   rules_synced: true,
@@ -88,6 +88,27 @@ describe("runtimeRowsFor", () => {
     ]);
     expect(runtimeVerdict({ harness: "claude", health: CLAUDE })).toEqual({ text: "diverged", tone: "warn" });
     expect(runtimeVerdict({ harness: "claude", health: { ...CLAUDE, agents_synced: true } })).toEqual({ text: "synced", tone: "ok" });
+  });
+
+  it("shows the Claude skill listing against the 8,000 character fallback, and only offers the setting over it", () => {
+    const listing = (characters: number) => runtimeRowsFor({ harness: "claude", health: { ...CLAUDE, skill_listing: { skills: 34, characters } } });
+    expect(row(listing(8000), "skill listing")).toEqual({ label: "skill listing", value: "34 skills · 8000 characters", tone: "dim" });
+    expect(row(listing(8870), "skill listing")).toEqual({
+      label: "skill listing",
+      value: "34 skills · 8870 characters · over the 8,000 fallback, descriptions may be cut",
+      tone: "warn",
+      wrap: true,
+    });
+    expect(row(runtimeRowsFor({ harness: "claude", health: { ...CLAUDE, skill_listing: { skills: 1, characters: 40 } } }), "skill listing")?.value).toBe("1 skill · 40 characters");
+    expect(row(runtimeRowsFor({ harness: "claude", health: CLAUDE }), "skill listing")).toBeUndefined();
+    expect(row(runtimeRowsFor({ harness: "claude", health: { ...CLAUDE, skill_listing: null } }), "skill listing")).toBeUndefined();
+
+    expect(offersSkillListingBudget({ ...CLAUDE, skill_listing: { skills: 34, characters: 8870 } })).toBe(true);
+    expect(offersSkillListingBudget({ ...CLAUDE, skill_listing: { skills: 34, characters: 8000 } })).toBe(false);
+    expect(offersSkillListingBudget({ ...CLAUDE, skill_listing: null })).toBe(false);
+    expect(offersSkillListingBudget(CLAUDE)).toBe(false);
+    expect(offersSkillListingBudget(null)).toBe(false);
+    expect(CLAUDE_SKILL_LISTING_SETTING).toBe('"skillListingBudgetFraction": 0.02');
   });
 
   it("lists OpenCode warnings one row each and tones the status", () => {

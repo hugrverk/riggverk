@@ -233,12 +233,36 @@ function lightRows(health: LightRuntimeHealth): KvItem[] {
   ];
 }
 
+/**
+ * Claude Code cuts skill descriptions once its listing is over a budget: 1% of the context window, 8,000 characters
+ * when it cannot tell the window. Only the fallback is known here, so that is what the listing is held against.
+ */
+const SKILL_LISTING_FALLBACK = 8000;
+
+/** The setting the Claude Code page suggests while the listing is over the fallback. Riggverk never writes it. */
+export const CLAUDE_SKILL_LISTING_SETTING = '"skillListingBudgetFraction": 0.02';
+
+/** Whether the page offers {@link CLAUDE_SKILL_LISTING_SETTING}: only while the listing is over the fallback. */
+export function offersSkillListingBudget(health: ClaudeRuntimeHealth | null): boolean {
+  return (health?.skill_listing?.characters ?? 0) > SKILL_LISTING_FALLBACK;
+}
+
+function skillListingRow(health: ClaudeRuntimeHealth): KvItem[] {
+  const listing = health.skill_listing;
+  if (!listing) return [];
+  const counts = `${listing.skills} ${listing.skills === 1 ? "skill" : "skills"} · ${listing.characters} characters`;
+  return offersSkillListingBudget(health)
+    ? [{ label: "skill listing", value: `${counts} · over the 8,000 fallback, descriptions may be cut`, tone: "warn", wrap: true }]
+    : [{ label: "skill listing", value: counts, tone: "dim" }];
+}
+
 function claudeRows(health: ClaudeRuntimeHealth): KvItem[] {
   return [
     ...textRow("checked with", health.checked_version, { tone: "dim" }),
     flagRow("rules", health.rules_synced),
     { label: "agents", value: `${health.agents_synced ? "synced" : "diverged"} · ${health.installed_agent_count}/${health.expected_agent_count}`, tone: health.agents_synced ? "ok" : "warn" },
     flagRow("skills", health.skills_synced),
+    ...skillListingRow(health),
     { label: "claude cli", value: health.claude_cli_available ? "available" : "not found", tone: health.claude_cli_available ? "ok" : "warn" },
   ];
 }

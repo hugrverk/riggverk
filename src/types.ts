@@ -781,7 +781,15 @@ export interface ClaudeRuntimeHealth {
   expected_agent_count: number;
   installed_agent_count: number;
   claude_cli_available: boolean;
+  /** How large Claude Code's listing of the skills in `~/.claude/skills` is (counts only); absent without that folder. */
+  skill_listing?: ClaudeSkillListing | null;
   summary: string;
+}
+
+/** Skills Claude Code lists to the model, and the characters of their `name`, `description` and `when_to_use`. */
+export interface ClaudeSkillListing {
+  skills: number;
+  characters: number;
 }
 
 /** The CLI of a light harness, from `<cli> --version` only. */
