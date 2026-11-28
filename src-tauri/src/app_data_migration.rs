@@ -69,6 +69,37 @@ pub fn take_startup_warning() -> Option<String> {
         .and_then(|mut warning| warning.take())
 }
 
+/// Whether [`migrate`] would move the legacy directory at the next start: it is a real directory
+/// and the current one is absent or empty. Reads metadata only, for callers that must not write.
+pub fn pending(env: &PlatformEnv, platform: Platform) -> Result<bool, String> {
+    let (old, new) = match (
+        legacy_app_support_dir(env, platform),
+        app_support_dir(env, platform),
+    ) {
+        (Ok(old), Ok(new)) => (old, new),
+        _ => return Ok(false),
+    };
+    match fs::symlink_metadata(&old) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => {
+            return Err(format!(
+                "cannot inspect the previous app data directory {}: {error}",
+                old.display()
+            ))
+        }
+        Ok(metadata) if !metadata.is_dir() => return Ok(false),
+        Ok(_) => {}
+    }
+    match fs::symlink_metadata(&new) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(true),
+        Err(error) => Err(format!(
+            "cannot inspect the app data directory {}: {error}",
+            new.display()
+        )),
+        Ok(metadata) => Ok(metadata.is_dir() && is_empty_dir(&new)),
+    }
+}
+
 /// Move the legacy directory to the current one when the rules above say so.
 /// `rename` is injected so tests can fail it.
 pub fn migrate(
