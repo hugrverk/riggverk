@@ -340,14 +340,8 @@ pub fn next_state_from_operations<R: SourceRoot + ?Sized>(
             },
         );
     }
-    record_claude_settings_values(
-        &mut records,
-        previous,
-        operations,
-        selected,
-        runtime_root,
-        home,
-    );
+    record_claude_settings_values(&mut records, previous, operations, selected);
+    end_claude_settings_ownership_of_changed_leaves(&mut records, runtime_root, home);
     refresh_records_matching_source(&mut records, bundled_root, runtime_root, home);
     record_opencode_role_models(&mut records, bundled_root, runtime_root, home);
     let mut artifacts: Vec<_> = records.into_values().collect();
@@ -409,15 +403,14 @@ fn refresh_records_matching_source<R: SourceRoot + ?Sized>(
 /// The record of `settings.json` after an apply that wrote it. The `hash` keeps saying whether the
 /// app owns the attribution values: an apply that did not write them leaves what the previous
 /// record said (`ABSENT_DIGEST` without one), so a user's own `""` is never adopted. The owned
-/// leaves are the previous ones with the apply's additions and removals, less any the file no
-/// longer holds as the app wrote them. A record no override was ever written for keeps `None`.
+/// leaves are the previous ones with the apply's additions and removals (see
+/// [`end_claude_settings_ownership_of_changed_leaves`] for the ones the user changed). A record
+/// no override was ever written for keeps `None`.
 fn record_claude_settings_values(
     records: &mut HashMap<String, ManagedArtifactRecord>,
     previous: Option<&ManagedState>,
     operations: &[crate::setup_transaction::ArtifactManifestOperation],
     selected: &[crate::setup_transaction::PlannedArtifact],
-    runtime_root: &Path,
-    home: &Path,
 ) {
     use crate::setup_lifecycle::OperationKind;
     let artifact = ArtifactId::ClaudeSettings;
@@ -450,17 +443,34 @@ fn record_claude_settings_values(
         );
     }
     let owned_before = before.and_then(|before| before.owned_values.as_ref());
-    record.owned_values = if leaves.touches_overrides() || owned_before.is_some() {
-        let owned = crate::claude_settings::owned_after(owned_before, leaves);
-        let installed = artifact
-            .resolve_dest(home, runtime_root)
-            .ok()
-            .and_then(|dest| crate::claude_settings::read(&dest).ok().flatten())
-            .unwrap_or_default();
-        Some(crate::claude_settings::still_owned(&installed, &owned))
-    } else {
-        None
+    record.owned_values = (leaves.touches_overrides() || owned_before.is_some())
+        .then(|| crate::claude_settings::owned_after(owned_before, leaves));
+}
+
+/// At every apply, whatever it wrote: an owned leaf of `settings.json` that no longer holds the
+/// value the app wrote is the user's from then on, and stays theirs if they later write the
+/// app's value back by hand. A file the app cannot read keeps the record as it is.
+fn end_claude_settings_ownership_of_changed_leaves(
+    records: &mut HashMap<String, ManagedArtifactRecord>,
+    runtime_root: &Path,
+    home: &Path,
+) {
+    let artifact = ArtifactId::ClaudeSettings;
+    let Some(owned) = records
+        .get_mut(&artifact_identity(&artifact))
+        .and_then(|record| record.owned_values.as_mut())
+        .filter(|owned| !owned.is_empty())
+    else {
+        return;
     };
+    let Ok(installed) = artifact
+        .resolve_dest(home, runtime_root)
+        .map_err(|_| ())
+        .and_then(|dest| crate::claude_settings::read(&dest).map_err(|_| ()))
+    else {
+        return;
+    };
+    *owned = crate::claude_settings::still_owned(&installed.unwrap_or_default(), owned);
 }
 
 /// While the installed `opencode.json` is what an install makes of it, the role models it holds

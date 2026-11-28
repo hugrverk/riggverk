@@ -1013,6 +1013,37 @@ mod tests {
     }
 
     #[test]
+    fn a_leaf_the_user_changed_is_theirs_even_after_they_change_it_back() {
+        let env = Env::new("overrides-ownership-ends");
+        env.set_target(SURFACE, false);
+        env.set_target(OVERRIDES_TARGET, true);
+        env.write_settings(USER_FILE);
+        env.apply();
+        let set_retro = |value: &str| {
+            let mut config = parse(&env.read_settings());
+            if let Some(Value::Object(overrides)) = config.get_mut("skillOverrides") {
+                overrides.insert("retro".into(), Value::String(value.into()));
+            }
+            env.write_settings(&serde_json::to_string_pretty(&Value::Object(config)).unwrap());
+        };
+        set_retro("off");
+        // Any later apply sees the change, even one of another surface.
+        env.apply_rules();
+        assert!(!env
+            .owned_paths()
+            .contains(&"skillOverrides.retro".to_string()));
+        set_retro("name-only");
+        env.set_target(OVERRIDES_TARGET, false);
+        env.apply();
+        assert_eq!(
+            overrides_of(&env.read_settings()),
+            *serde_json::json!({"retro": "name-only"})
+                .as_object()
+                .unwrap()
+        );
+    }
+
+    #[test]
     fn an_edit_outside_attribution_after_the_preview_is_merged_as_before() {
         let env = Env::new("attribution-edit-after-preview");
         env.write_settings(USER_FILE);
