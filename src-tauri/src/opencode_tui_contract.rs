@@ -135,6 +135,7 @@ mod tests {
                 hash,
                 surface: Some("open_code_config".to_string()),
                 role_models: Default::default(),
+                owned_values: None,
             });
             state.artifacts.sort_by(|a, b| a.identity.cmp(&b.identity));
             write_managed_state_atomic(&self.ws, &state).expect("managed state");

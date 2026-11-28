@@ -2339,6 +2339,7 @@ fn stale_removal_never_deletes_a_user_modified_file() {
             hash: crate::stable_digest::bytes(installed_by_app.as_bytes()),
             surface: None,
             role_models: Default::default(),
+            owned_values: None,
         });
     }
     // The user edits one skill the app once installed and has since retired.
@@ -2400,6 +2401,7 @@ fn a_workspace_doc_dropped_from_the_bundle_is_a_backed_up_stale_removal() {
             hash: crate::stable_digest::bytes(b"app copy"),
             surface: None,
             role_models: Default::default(),
+            owned_values: None,
         });
     }
     let edited_dest = edited.resolve_dest(&env.home, &env.ws).unwrap();
@@ -2482,6 +2484,7 @@ fn retired_cli_scripts_are_backed_up_stale_removals_and_empty_lib_dir_is_pruned(
             hash: crate::stable_digest::bytes(b"app copy"),
             surface: None,
             role_models: Default::default(),
+            owned_values: None,
         });
     }
     let edited_dest = edited.resolve_dest(&env.home, &env.ws).unwrap();

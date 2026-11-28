@@ -159,6 +159,7 @@ mod tests {
                         .ok()
                         .and_then(|value| value.as_str().map(str::to_string)),
                     role_models: Default::default(),
+                    owned_values: None,
                 });
             }
             state.artifacts.sort_by(|a, b| a.identity.cmp(&b.identity));
@@ -360,6 +361,7 @@ mod tests {
                 hash: stable_digest::bytes(b"a stale recorded hash"),
                 surface: Some("skills".into()),
                 role_models: Default::default(),
+                owned_values: None,
             });
             write_managed_state_atomic(&env.ws, &state).expect("write state");
         }

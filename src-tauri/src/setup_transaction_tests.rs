@@ -963,6 +963,7 @@ fn refreshed_record_turns_the_next_source_change_into_update_not_conflict() {
             hash: crate::stable_digest::bytes(b"older shipped version"),
             surface: None,
             role_models: Default::default(),
+            owned_values: None,
         }],
     };
     let (kind, _) = detect_artifact_state(&artifact, &ws, &home);
@@ -1110,6 +1111,7 @@ fn managed_opencode_rollback_restores_role_models_and_matches_the_backup() {
                     .iter()
                     .map(|(role, model)| (role.to_string(), model.to_string()))
                     .collect(),
+                owned_values: None,
             }],
         };
         crate::managed_state::write_managed_state_atomic(&ws, &state).unwrap();
@@ -1541,6 +1543,7 @@ fn a_stale_artifact_at_a_wanted_destination_is_planned_once_as_the_wanted_one() 
                 hash: crate::stable_digest::bytes(&source),
                 surface: None,
                 role_models: Default::default(),
+                owned_values: None,
             })
             .collect(),
     };

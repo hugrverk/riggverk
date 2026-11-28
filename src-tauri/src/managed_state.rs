@@ -40,6 +40,13 @@ pub struct ManagedArtifactRecord {
     /// from older versions have none.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub role_models: BTreeMap<String, String>,
+    /// Claude's `settings.json` only: the leaves the app wrote, by JSON path
+    /// (`skillOverrides.retro`), each with the digest of the value written, never the value. A
+    /// leaf is the app's only while its value still has that digest; `skillOverrides` itself is
+    /// listed when the app created the object. `None` is a record of an older version: it owns
+    /// no such leaf (its `hash` still says whether it owns the attribution values).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owned_values: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -287,6 +294,7 @@ pub fn next_state_from_operations<R: SourceRoot + ?Sized>(
                             .ok()
                             .and_then(|value| value.as_str().map(str::to_string)),
                         role_models: Default::default(),
+                        owned_values: None,
                     },
                 );
             }
@@ -328,6 +336,7 @@ pub fn next_state_from_operations<R: SourceRoot + ?Sized>(
                     .ok()
                     .and_then(|value| value.as_str().map(str::to_string)),
                 role_models: Default::default(),
+                owned_values: None,
             },
         );
     }
@@ -552,6 +561,7 @@ mod tests {
                 hash: crate::stable_digest::bytes(b"artifact"),
                 surface: None,
                 role_models: Default::default(),
+                owned_values: None,
             }],
         };
         write_managed_state_atomic(&root, &state).unwrap();
@@ -572,6 +582,7 @@ mod tests {
             hash: crate::stable_digest::bytes(bytes),
             surface: Some("claude_skills".into()),
             role_models: Default::default(),
+            owned_values: None,
         }
     }
 
@@ -664,6 +675,55 @@ mod tests {
     }
 
     #[test]
+    fn owned_values_are_additive_and_an_older_reader_loses_nothing_else() {
+        // The record as versions before `owned_values` read it.
+        #[derive(Serialize, Deserialize)]
+        struct OlderRecord {
+            identity: String,
+            hash: String,
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            surface: Option<String>,
+            #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+            role_models: BTreeMap<String, String>,
+        }
+        let record = ManagedArtifactRecord {
+            identity: artifact_identity(&ArtifactId::ClaudeSettings),
+            hash: crate::stable_digest::bytes(b"attribution"),
+            surface: Some("claude_config".into()),
+            role_models: [("build".to_string(), "model".to_string())].into(),
+            owned_values: Some(
+                [(
+                    "skillOverrides.retro".to_string(),
+                    crate::stable_digest::bytes(b"value"),
+                )]
+                .into(),
+            ),
+        };
+        let written = serde_json::to_value(&record).unwrap();
+        assert_eq!(
+            written["owned_values"]["skillOverrides.retro"],
+            crate::stable_digest::bytes(b"value").as_str()
+        );
+        let older: OlderRecord = serde_json::from_value(written).expect("older reader");
+        let rewritten: ManagedArtifactRecord =
+            serde_json::from_value(serde_json::to_value(&older).unwrap()).unwrap();
+        assert_eq!(
+            rewritten,
+            ManagedArtifactRecord {
+                owned_values: None,
+                ..record.clone()
+            }
+        );
+        // A record without the field reads as one that owns no such leaf.
+        let mut without = record;
+        without.owned_values = None;
+        assert!(serde_json::to_value(&without)
+            .unwrap()
+            .get("owned_values")
+            .is_none());
+    }
+
+    #[test]
     fn schema_one_is_not_trusted() {
         let root = temp_dir("schema-one");
         fs::create_dir_all(root.join(crate::workspace_layout::STATE_DIR)).unwrap();
@@ -720,6 +780,7 @@ mod tests {
             hash: stale_hash.clone(),
             surface: None,
             role_models: Default::default(),
+            owned_values: None,
         };
         let previous = ManagedState {
             schema_version: MANAGED_STATE_SCHEMA_VERSION,

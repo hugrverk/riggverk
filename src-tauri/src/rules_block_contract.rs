@@ -97,6 +97,7 @@ mod tests {
                         hash: hash.to_string(),
                         surface: None,
                         role_models: Default::default(),
+                        owned_values: None,
                     }],
                 },
             )
@@ -617,12 +618,14 @@ mod tests {
                         hash: body_digest(OLD_BASE),
                         surface: None,
                         role_models: Default::default(),
+                        owned_values: None,
                     },
                     ManagedArtifactRecord {
                         identity: artifact_identity(&ArtifactId::OpenCodeRules),
                         hash: body_digest(OLD_BASE),
                         surface: None,
                         role_models: Default::default(),
+                        owned_values: None,
                     },
                 ],
             },

@@ -1623,6 +1623,7 @@ mod tests {
                 hash: crate::stable_digest::bytes(identity.as_bytes()),
                 surface: surface.map(str::to_string),
                 role_models: Default::default(),
+                owned_values: None,
             }],
         };
         crate::managed_state::write_managed_state_atomic(&root, &state)

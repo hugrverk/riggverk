@@ -217,6 +217,7 @@ mod tests {
                     hash: stable_digest::bytes(&bytes),
                     surface: None,
                     role_models: Default::default(),
+                    owned_values: None,
                 });
             }
             self.add_records(records);
@@ -241,6 +242,7 @@ mod tests {
                         hash: stable_digest::bytes(&bytes),
                         surface: None,
                         role_models: Default::default(),
+                        owned_values: None,
                     });
                 }
             }
@@ -1157,6 +1159,7 @@ mod tests {
             hash: stable_digest::bytes(older),
             surface: None,
             role_models: Default::default(),
+            owned_values: None,
         }]);
 
         let plan = env.preview();
@@ -1350,6 +1353,7 @@ mod tests {
                 hash: stable_digest::bytes(bytes),
                 surface: None,
                 role_models: Default::default(),
+                owned_values: None,
             });
         };
 

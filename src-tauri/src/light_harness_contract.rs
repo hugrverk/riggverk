@@ -184,6 +184,7 @@ mod tests {
                         hash: hash.to_string(),
                         surface: None,
                         role_models: Default::default(),
+                        owned_values: None,
                     }],
                 },
             )
@@ -1348,6 +1349,7 @@ mod tests {
                             hash: hash.to_string(),
                             surface: None,
                             role_models: Default::default(),
+                            owned_values: None,
                         }],
                     },
                 )
