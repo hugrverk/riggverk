@@ -34,7 +34,9 @@ The same executable answers two read-only questions from a terminal, without ope
 - `riggverk status` prints the installation summary and one line per surface; `riggverk status --json` prints the same status as JSON.
 - `riggverk check` prints the summary and exits with 0 when everything is current, 1 when something is to install, update or decide, and 2 when the status is unavailable or an error occurred.
 
-A mistyped subcommand prints the usage and exits with 2. Both never write, start no updater and make no network request. If Riggverk still has to move its app data from an earlier version, they say so and exit with 2: open the app once first.
+A mistyped subcommand prints the usage and exits with 2. Both change nothing: no file in your home folder, the data folder or the backup folder is created, changed or removed, no updater starts and no network request is made. Comparing a Codex config can use a folder in the system temp folder, which is removed again. If Riggverk still has to move its app data from an earlier version, they say so and exit with 2: open the app once first.
+
+They read the same environment variables as the app (`RIGGVERK_WORKSPACE_PATH`, `CODEX_HOME`, `XDG_CONFIG_HOME`, `PLAYWRIGHT_BROWSERS_PATH` and the others the docs name). The app sees the environment it was started with, and a terminal may hold other values, so the two can then give different answers for the same machine.
 
 The executable is `/Applications/Riggverk.app/Contents/MacOS/riggverk` on macOS, `riggverk` after a deb or rpm install, and the AppImage file itself. Windows builds print nothing to a console.
 
