@@ -344,6 +344,8 @@ def main() -> None:
         TAURI / "comment_policy.rs",
         # Choosing an answer style writes only answer-style.json, through safe_filesystem.
         TAURI / "answer_style.rs",
+        # Choosing a decision style writes only decision-style.json, through safe_filesystem.
+        TAURI / "decision_style.rs",
     ):
         # Whole production file, minus #[cfg(test)] items; comments and string
         # literals are blanked so only real calls count.
@@ -362,6 +364,8 @@ def main() -> None:
         fail("comment_policy.rs must publish comment-policy.json through safe_filesystem")
     if "write_regular_file_atomic" not in production_code[TAURI / "answer_style.rs"]:
         fail("answer_style.rs must publish answer-style.json through safe_filesystem")
+    if "write_regular_file_atomic" not in production_code[TAURI / "decision_style.rs"]:
+        fail("decision_style.rs must publish decision-style.json through safe_filesystem")
     # The preview token is consumed exactly once, inside the apply owner.
     setup_code = production_code[TAURI / "commands/setup.rs"]
     if len(re.findall(r"\bconsume_preview_token\b", setup_code)) != 1:

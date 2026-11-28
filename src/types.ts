@@ -1094,6 +1094,17 @@ export interface AnswerStyleChoice {
   problem: string | null;
 }
 
+/** How agents put the user's decisions, for every harness (`decision-style.json`). */
+export type DecisionStyleLevel = "harness_default" | "as_questions";
+
+/** The decision style (`get_decision_style`). */
+export interface DecisionStyleChoice {
+  /** Null while `decision-style.json` cannot be used. */
+  level: DecisionStyleLevel | null;
+  /** Why `decision-style.json` cannot be used; set, no level can be chosen. */
+  problem: string | null;
+}
+
 export interface PackLibrary {
   /** Why `pack-skills.json` cannot be used; set, installed pack skills are kept as they are. */
   record_problem?: string | null;

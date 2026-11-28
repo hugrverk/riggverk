@@ -13,6 +13,8 @@ import type {
   CommentPolicyChoice,
   CommentPolicyLevel,
   ConfigEditorSourceMeta,
+  DecisionStyleChoice,
+  DecisionStyleLevel,
   DocSummary,
   InstallAgent,
   PackLibrary,
@@ -71,7 +73,9 @@ export type RowAction =
   /** Chooses how much agents comment code, for every harness. */
   | { type: "comment-policy"; level: CommentPolicyLevel }
   /** Chooses how agents word their answers, for every harness. */
-  | { type: "answer-style"; level: AnswerStyleLevel };
+  | { type: "answer-style"; level: AnswerStyleLevel }
+  /** Chooses how agents put the user's decisions, for every harness. */
+  | { type: "decision-style"; level: DecisionStyleLevel };
 
 export interface RowVerb {
   label: string;
@@ -150,6 +154,10 @@ export interface LibraryModelInput {
   answerStyle?: AnswerStyleChoice | null;
   /** The levels the answer style is not at offer "Use". */
   canSetAnswerStyle?: boolean;
+  /** The decision style; null while it could not be read (the group is then left out). */
+  decisionStyle?: DecisionStyleChoice | null;
+  /** The levels the decision style is not at offer "Use". */
+  canSetDecisionStyle?: boolean;
 }
 
 const SHADOWED_TEXT = "A bundled skill has this name, so the bundle wins. Rename it in the pack to use it.";
@@ -262,6 +270,37 @@ function answerStyleGroup(input: LibraryModelInput): LibraryGroup | null {
     }),
     notes: choice.problem ? [{ key: "answer-style", label: "answer style", text: `unavailable: ${choice.problem}` }] : undefined,
     notesLabel: choice.problem ? "Answer style problem" : undefined,
+  };
+}
+
+/** The decision style's levels, in the order shown, each said in one line. */
+export const DECISION_STYLE_LEVELS: readonly { level: DecisionStyleLevel; name: string; desc: string }[] = [
+  { level: "harness_default", name: "Harness default", desc: "Adds nothing: each agent asks the way it does by default." },
+  { level: "as_questions", name: "As questions", desc: "Decisions that are yours come as questions with a recommended answer first, through the agent's question tool when it has one." },
+];
+
+/** The "Decisions" group: one row per level, the one in use marked, the others offering Use. */
+function decisionStyleGroup(input: LibraryModelInput): LibraryGroup | null {
+  const choice = input.decisionStyle;
+  if (!choice) return null;
+  const canSet = input.canSetDecisionStyle === true && input.dataFolderOk && !choice.problem;
+  return {
+    key: "rules-decisions",
+    label: "Decisions",
+    hint: "for every harness · the next Update changes the rules",
+    rows: DECISION_STYLE_LEVELS.map(({ level, name, desc }) => {
+      const inUse = !choice.problem && choice.level === level;
+      return {
+        key: `decisions:${level}`,
+        name,
+        desc,
+        state: inUse ? { state: "ok" as const, label: "In use" } : undefined,
+        verbs: canSet && !inUse ? [{ label: "Use", action: { type: "decision-style", level } as RowAction }] : [],
+        haystack: haystack(name, desc, "decisions", "rules", inUse ? "in use" : undefined),
+      };
+    }),
+    notes: choice.problem ? [{ key: "decision-style", label: "decisions", text: `unavailable: ${choice.problem}` }] : undefined,
+    notesLabel: choice.problem ? "Decisions problem" : undefined,
   };
 }
 
@@ -508,7 +547,7 @@ export function topicGroups(topic: LibrarySourceType, input: LibraryModelInput):
             },
           ],
         },
-        ...[commentPolicyGroup(input), answerStyleGroup(input)].filter((group): group is LibraryGroup => group !== null),
+        ...[commentPolicyGroup(input), answerStyleGroup(input), decisionStyleGroup(input)].filter((group): group is LibraryGroup => group !== null),
       ];
     }
     case "skills": {

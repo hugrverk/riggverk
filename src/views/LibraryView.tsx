@@ -11,6 +11,8 @@ import type {
   CommentPolicyChoice,
   CommentPolicyLevel,
   ConfigEditorSourceMeta,
+  DecisionStyleChoice,
+  DecisionStyleLevel,
   DocSummary,
   DocumentContent,
   ImportRouting,
@@ -139,6 +141,10 @@ export interface LibraryViewProps {
   answerStyle?: AnswerStyleChoice | null;
   /** Chooses the answer style for every harness; resolves true once saved. Without it no level offers Use. */
   onSetAnswerStyle?: (level: AnswerStyleLevel) => Promise<boolean>;
+  /** How agents put the user's decisions; null while it could not be read (Rules then shows no "Decisions"). */
+  decisionStyle?: DecisionStyleChoice | null;
+  /** Chooses the decision style for every harness; resolves true once saved. Without it no level offers Use. */
+  onSetDecisionStyle?: (level: DecisionStyleLevel) => Promise<boolean>;
   /**
    * Skill import: preview copies the dropped or given paths into private staging; commit publishes the previewed
    * copy into pack:imported and lists the packs again. Without them there is no "Import skill…".
@@ -243,6 +249,8 @@ export function LibraryView(props: LibraryViewProps) {
     canSetCommentPolicy: props.onSetCommentPolicy !== undefined,
     answerStyle: props.answerStyle ?? null,
     canSetAnswerStyle: props.onSetAnswerStyle !== undefined,
+    decisionStyle: props.decisionStyle ?? null,
+    canSetDecisionStyle: props.onSetDecisionStyle !== undefined,
   };
 
   const topics = LIBRARY_TOPICS.filter(topic => topic.id !== "configs" || showConfigs);
@@ -515,6 +523,11 @@ export function LibraryView(props: LibraryViewProps) {
       case "answer-style":
         void props.onSetAnswerStyle?.(action.level).then(saved => {
           if (saved) notify(`Answer style: ${row.name} · the next Update changes your rules`, { tone: "ok" });
+        });
+        break;
+      case "decision-style":
+        void props.onSetDecisionStyle?.(action.level).then(saved => {
+          if (saved) notify(`Decisions: ${row.name} · the next Update changes your rules`, { tone: "ok" });
         });
         break;
       case "open":

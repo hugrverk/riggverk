@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::answer_style::AnswerStyle;
 use crate::comment_policy::CommentPolicy;
+use crate::decision_style::DecisionStyle;
 use crate::pack_routing::PackRouting;
 use crate::skill_discovery::DiscoveredSkill;
 
@@ -101,6 +102,12 @@ pub trait SourceRoot {
     /// renders rules then fails closed. Harness default without a data folder.
     fn answer_style(&self) -> Result<AnswerStyle, &str> {
         Ok(AnswerStyle::HarnessDefault)
+    }
+    /// How agents put the user's decisions (see [`crate::decision_style`]): the section the rules
+    /// block gets. An error is the fixed phrase of a `decision-style.json` that cannot be used;
+    /// whatever renders rules then fails closed. Harness default without a data folder.
+    fn decision_style(&self) -> Result<DecisionStyle, &str> {
+        Ok(DecisionStyle::HarnessDefault)
     }
 }
 
@@ -252,6 +259,8 @@ pub struct SkillSources {
     comment_policy: Result<CommentPolicy, String>,
     /// `answer-style.json` (see [`crate::answer_style`]).
     answer_style: Result<AnswerStyle, String>,
+    /// `decision-style.json` (see [`crate::decision_style`]).
+    decision_style: Result<DecisionStyle, String>,
 }
 
 impl SourceRoot for SkillSources {
@@ -285,6 +294,12 @@ impl SourceRoot for SkillSources {
     }
     fn answer_style(&self) -> Result<AnswerStyle, &str> {
         self.answer_style.as_ref().copied().map_err(String::as_str)
+    }
+    fn decision_style(&self) -> Result<DecisionStyle, &str> {
+        self.decision_style
+            .as_ref()
+            .copied()
+            .map_err(String::as_str)
     }
 }
 
@@ -333,6 +348,7 @@ impl SkillSources {
             disabled: Ok(BTreeSet::new()),
             comment_policy: Ok(CommentPolicy::HarnessDefault),
             answer_style: Ok(AnswerStyle::HarnessDefault),
+            decision_style: Ok(DecisionStyle::HarnessDefault),
         }
     }
 
@@ -389,6 +405,7 @@ impl SkillSources {
         let routing_section = render_routing(&packs, &catalog, &disabled);
         let comment_policy = crate::comment_policy::load(workspace_root);
         let answer_style = crate::answer_style::load(workspace_root);
+        let decision_style = crate::decision_style::load(workspace_root);
         Self {
             bundled,
             workspace_root: workspace_root.to_path_buf(),
@@ -402,6 +419,7 @@ impl SkillSources {
             disabled,
             comment_policy,
             answer_style,
+            decision_style,
         }
     }
 

@@ -1667,3 +1667,48 @@ describe("useLibraryController answer style", () => {
     expect(result.current.answerStyle).toEqual({ level: "plain", problem: null });
   });
 });
+
+describe("useLibraryController decision style", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("keeps the newer level when an earlier read answers after the refresh that follows a Set", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    let level: "harness_default" | "as_questions" = "harness_default";
+    let releaseOld: () => void = () => {};
+    let reads = 0;
+    invoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      switch (cmd) {
+        case "get_decision_style": {
+          reads += 1;
+          const answer = { level, problem: null };
+          // The first read is slow: it answers only after the Set and its own read are done.
+          return reads === 1 ? new Promise(resolve => { releaseOld = () => resolve(answer); }) : Promise.resolve(answer);
+        }
+        case "set_decision_style":
+          level = args!.level as typeof level;
+          return Promise.resolve(null);
+        case "read_agent_template":
+          return Promise.resolve(bundledDoc);
+        default:
+          return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+      }
+    });
+
+    let older: Promise<void> = Promise.resolve();
+    act(() => {
+      older = result.current.loadDecisionStyle();
+    });
+    await act(async () => {
+      expect(await result.current.setDecisionStyle("as_questions")).toBe(true);
+    });
+    expect(result.current.decisionStyle?.level).toBe("as_questions");
+    await act(async () => {
+      releaseOld();
+      await older;
+    });
+    expect(result.current.decisionStyle).toEqual({ level: "as_questions", problem: null });
+  });
+});

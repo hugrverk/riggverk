@@ -6,6 +6,7 @@ import type {
   AnswerStyleChoice,
   CodexConfigDefaultsPreview,
   CommentPolicyChoice,
+  DecisionStyleChoice,
   DocSummary,
   DocumentContent,
   FileDiffView,
@@ -283,6 +284,38 @@ describe("mock backend: answer style", () => {
     expect((await invoke<AnswerStyleChoice>("get_answer_style")).level).toBe("plain");
 
     await invoke("set_answer_style", { level: "harness_default" });
+    expect((await invoke<DocumentContent>("read_agent_template")).content).toBe(bundled);
+  });
+});
+
+describe("mock backend: decision style", () => {
+  it("starts at harness default, keeps a chosen level across reads and composes it after Communication", async () => {
+    expect(await invoke<DecisionStyleChoice>("get_decision_style")).toEqual({ level: "harness_default", problem: null });
+    const bundled = (await invoke<DocumentContent>("read_agent_template")).content;
+    expect(bundled).not.toContain("## Decisions");
+
+    await invoke("set_decision_style", { level: "as_questions" });
+    expect(await invoke<DecisionStyleChoice>("get_decision_style")).toEqual({ level: "as_questions", problem: null });
+    const template = (await invoke<DocumentContent>("read_agent_template")).content;
+    expect(template).toContain("\n\n## Decisions\n");
+    expect(template.match(/## Decisions/g)).toHaveLength(1);
+    // Right after the Communication section, before the section that follows it.
+    expect(template.indexOf("## Decisions")).toBeGreaterThan(template.indexOf("## Communication"));
+    expect(template.indexOf("## Decisions")).toBeLessThan(template.indexOf("## Verification"));
+    await expect(invoke("set_decision_style", { level: "loud" })).rejects.toThrow(/unknown decision style/);
+    expect((await invoke<DecisionStyleChoice>("get_decision_style")).level).toBe("as_questions");
+
+    // With the answer style on, the decisions follow its section.
+    await invoke("set_answer_style", { level: "plain" });
+    const both = (await invoke<DocumentContent>("read_agent_template")).content;
+    expect(both.match(/## Answer style/g)).toHaveLength(1);
+    expect(both.match(/## Decisions/g)).toHaveLength(1);
+    expect(both.indexOf("## Communication")).toBeLessThan(both.indexOf("## Answer style"));
+    expect(both.indexOf("## Answer style")).toBeLessThan(both.indexOf("## Decisions"));
+    expect(both.indexOf("## Decisions")).toBeLessThan(both.indexOf("## Verification"));
+    await invoke("set_answer_style", { level: "harness_default" });
+
+    await invoke("set_decision_style", { level: "harness_default" });
     expect((await invoke<DocumentContent>("read_agent_template")).content).toBe(bundled);
   });
 });

@@ -109,6 +109,8 @@ function AppShell() {
     setCommentPolicy,
     answerStyle,
     setAnswerStyle,
+    decisionStyle,
+    setDecisionStyle,
     activeSkillId,
     activeSkillContent,
     readSkill,
@@ -929,6 +931,8 @@ function AppShell() {
             onSetCommentPolicy={setCommentPolicy}
             answerStyle={answerStyle}
             onSetAnswerStyle={setAnswerStyle}
+            decisionStyle={decisionStyle}
+            onSetDecisionStyle={setDecisionStyle}
             onPreviewImport={previewSkillImport}
             onCommitImport={commitSkillImport}
             onSetImportedRouting={setImportedSkillRouting}
