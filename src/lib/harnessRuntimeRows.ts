@@ -139,9 +139,15 @@ function opencodePlaywrightRow(health: OpenCodeRuntimeHealth): KvItem {
   return compared ? { label, value: `synced · ${version}`, tone: "ok" } : { label, value: version, tone: "dim" };
 }
 
+/** On 1.x a line that is only a redirection runs without a permission check; OpenCode 2 asks. The detail is in OPENCODE_CONFIG.md. */
+function opencodeShellRulesRow(cli: OpenCodeCliHealth | null): KvItem[] {
+  return cli?.major === 1 ? [{ label: "shell rules", value: "a filter, not a sandbox · see Limits of bash rules", tone: "dim" }] : [];
+}
+
 function opencodeRows(health: OpenCodeRuntimeHealth): KvItem[] {
   return [
     ...opencodeCliRow(health.cli, health.checked_version),
+    ...opencodeShellRulesRow(health.cli),
     ...textRow("default agent", health.default_agent),
     ...textRow("autoupdate", health.autoupdate),
     statusRow("rules", health.rules_status),

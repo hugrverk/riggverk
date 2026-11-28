@@ -142,6 +142,16 @@ describe("runtimeRowsFor", () => {
     expect(row(rowsOf({ cli: { status: "unknown", version: null, major: null, detail: "" } }), "cli")).toMatchObject({ value: "found · version unknown", tone: "dim" });
   });
 
+  it("notes on OpenCode 1.x that shell rules are a filter, and only there", () => {
+    expect(row(rowsOf(), "shell rules")).toEqual({ label: "shell rules", value: "a filter, not a sandbox · see Limits of bash rules", tone: "dim" });
+
+    const two = { status: "compatible", version: "2.3.2", major: 2, detail: "" };
+    expect(row(rowsOf({ cli: two }), "shell rules")).toBeUndefined();
+    expect(row(rowsOf({ cli: null }), "shell rules")).toBeUndefined();
+    expect(row(rowsOf({ cli: { status: "missing", version: null, major: null, detail: "not found" } }), "shell rules")).toBeUndefined();
+    expect(row(rowsOf({ cli: { status: "unknown", version: null, major: null, detail: "" } }), "shell rules")).toBeUndefined();
+  });
+
   it("shows the unsupported-version warning from the backend like any other warning", () => {
     const warning = "OpenCode 3.0.0 is installed, but Riggverk supports OpenCode 1.x";
     const rows = rowsOf({ warnings: [warning], cli: { status: "unsupported", version: "3.0.0", major: 3, detail: warning } });
