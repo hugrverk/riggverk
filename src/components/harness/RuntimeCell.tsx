@@ -17,7 +17,7 @@ export interface RuntimeCellProps {
   /** The verdict in a word or two ("synced", "diverged", "workspace folder unusable"). */
   verdict: { text: string; tone: Tone };
   rows: readonly KvItem[];
-  /** After the rows: the OpenCode model override. */
+  /** After the rows: the setting the Claude Code page suggests while its skill listing is over the fallback. */
   children?: ReactNode;
 }
 

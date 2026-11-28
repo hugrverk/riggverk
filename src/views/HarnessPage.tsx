@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CodexDefaultsPane } from "../components/CodexDefaultsPane";
 import { ConflictPane } from "../components/ConflictPane";
+import { CopyButton } from "../components/CopyButton";
 import { CodexConfigDecision } from "../components/decisions/CodexConfigDecision";
 import { FilesDecision } from "../components/decisions/FilesDecision";
 import { RulesDecision } from "../components/decisions/RulesDecision";
@@ -19,7 +20,13 @@ import { fileConflictModelFor, filesSurfacesOf, type FileConflictModel } from ".
 import { CODEX_CONFIG_SURFACE, codexConfigGates, codexConfigModelFor } from "../lib/codexConfig";
 import { harnessHomePath, harnessSubline } from "../lib/harnessHeader";
 import { BEST_EFFORT_LABEL, BEST_EFFORT_NOTE, HARNESS_LABELS, supportTier } from "../lib/harnessInstallation";
-import { runtimeRowsFor, runtimeVerdict, type HarnessRuntimeHealth } from "../lib/harnessRuntimeRows";
+import {
+  CLAUDE_SKILL_LISTING_SETTING,
+  offersSkillListingBudget,
+  runtimeRowsFor,
+  runtimeVerdict,
+  type HarnessRuntimeHealth,
+} from "../lib/harnessRuntimeRows";
 import {
   harnessRowsFor,
   previewDisabledFor,
@@ -467,7 +474,23 @@ export function HarnessPage({
             <RuntimeCell
               verdict={verdict}
               rows={dataFolderOk ? runtimeRowsFor(runtime, skillLoadRows(skillLoads, harness)) : []}
-            />
+            >
+              {/* A suggestion only, like the .env deny lines: Riggverk never writes Claude Code's settings for it. */}
+              {dataFolderOk && runtime.harness === "claude" && offersSkillListingBudget(runtime.health) && (
+                <div className="hp-env-deny">
+                  <p>
+                    Claude Code cuts skill descriptions over its listing budget (1% of the context window). This setting in{" "}
+                    <code>~/.claude/settings.json</code> doubles it. Riggverk does not write it.
+                  </p>
+                  <div className="copyable-block">
+                    <CopyButton getText={() => CLAUDE_SKILL_LISTING_SETTING} fallbackElementId="skill-listing-setting" copyLabel="Copy the skill listing setting" />
+                    <pre id="skill-listing-setting" className="markdown-code">
+                      {CLAUDE_SKILL_LISTING_SETTING}
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </RuntimeCell>
             {dataFolderOk && runtimeExtra && (
               <div className="hp-cell hp-span3 hp-model">
                 <span className="hp-lbl">Model</span>

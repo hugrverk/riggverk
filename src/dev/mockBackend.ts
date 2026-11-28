@@ -1396,6 +1396,7 @@ function claudeHealth(): ClaudeRuntimeHealth {
     expected_agent_count: 6,
     installed_agent_count: fresh ? 0 : 5,
     claude_cli_available: true,
+    skill_listing: { skills: 34, characters: 8870 },
     summary: fresh ? "Claude is not set up yet." : "Claude CLI available · agents 5/6 · skills 17/18",
   };
 }

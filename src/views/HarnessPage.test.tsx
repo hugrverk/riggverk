@@ -372,6 +372,26 @@ describe("HarnessPage", () => {
     expect(claude.querySelector(".hp-sub")!.textContent).toBe("~/.claude · 5 agents · CLI available");
   });
 
+  it("offers the skill listing setting to copy only while the listing is over the fallback", async () => {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    renderInFrame(<ClaudeView {...props()} runtimeHealth={{ ...CLAUDE_HEALTH, skill_listing: { skills: 34, characters: 8870 } }} />);
+    const claude = screen.getByRole("region", { name: "Claude" });
+    expect(facts(runtime(claude))["skill listing"]).toBe("34 skills · 8870 characters · over the 8,000 fallback, descriptions may be cut");
+    expect(runtime(claude).querySelector(".hp-env-deny pre")!.textContent).toBe('"skillListingBudgetFraction": 0.02');
+    expect(runtime(claude).querySelector(".hp-env-deny p")!.textContent).toBe(
+      "Claude Code cuts skill descriptions over its listing budget (1% of the context window). This setting in ~/.claude/settings.json doubles it. Riggverk does not write it.",
+    );
+    fireEvent.click(within(runtime(claude)).getByRole("button", { name: "Copy the skill listing setting" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('"skillListingBudgetFraction": 0.02'));
+    cleanup();
+
+    renderInFrame(<ClaudeView {...props()} runtimeHealth={{ ...CLAUDE_HEALTH, skill_listing: { skills: 34, characters: 8000 } }} />);
+    const under = screen.getByRole("region", { name: "Claude" });
+    expect(facts(runtime(under))["skill listing"]).toBe("34 skills · 8000 characters");
+    expect(within(runtime(under)).queryByRole("button", { name: "Copy the skill listing setting" })).toBeNull();
+  });
+
   it("shows the safety notes of the harness, loaded from its own config, as advice only", async () => {
     invokeMock.mockImplementation(async (command: string, args?: { harness?: string }) => {
       if (command === "get_security_posture") return args?.harness === "claude" ? RISKY_CLAUDE : CLEAN_CODEX;
