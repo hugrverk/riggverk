@@ -918,7 +918,11 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn only_version_is_ever_passed_to_the_cli_from_a_neutral_directory() {
-        let _guard = crate::test_env::guard::lock();
+        super::super::opencode_cli::with_probes_in_app_data(only_version_from_a_neutral_directory);
+    }
+
+    #[cfg(unix)]
+    fn only_version_from_a_neutral_directory() {
         let bin = Bin::new("args");
         bin.add(
             "kilo",
