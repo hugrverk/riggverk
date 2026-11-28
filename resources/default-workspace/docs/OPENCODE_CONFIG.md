@@ -2,7 +2,7 @@
 
 ## Supported OpenCode version
 
-Riggverk manages the **OpenCode 1.x** config format (`opencode.json`, `tui.json`, `agents/*.md`) and is verified against OpenCode 1.19.3. Install 1.x with npm (`npm i -g opencode-ai`) or the Homebrew tap (`brew install anomalyco/tap/opencode`). Homebrew core's `opencode` formula installs **2.x**, so check `opencode --version` after installing.
+Riggverk manages the **OpenCode 1.x** config format (`opencode.json`, `tui.json`, `agents/*.md`) and is verified against OpenCode 1.19.3; the folders, the resolved config, the agents and the skill list were checked again on 1.19.6. Install 1.x with npm (`npm i -g opencode-ai`) or the Homebrew tap (`brew install anomalyco/tap/opencode`). Homebrew core's `opencode` formula installs **2.x**, so check `opencode --version` after installing.
 
 OpenCode 2.x is compatible, tested with 2.3.2. It reads the 1.x config Riggverk writes and converts it in memory. Riggverk writes only the 1.x format, because 1.x cannot read the 2.x one. The OpenCode Runtime cell shows the detected version in its `cli` row, marked `compatible` on 2.x. OpenCode 3.x and later are unsupported, and the cell warns. On 2.x the model list is read with `opencode models --standalone` (2.x has no `--pure`, and without `--standalone` it would use a background service); on 1.x it is `opencode models --pure`.
 
