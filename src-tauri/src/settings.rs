@@ -375,20 +375,26 @@ pub fn harness_enabled(settings: &AppSettings, harness: HarnessId) -> bool {
 }
 
 /// A surface may be installed when its harness is enabled and, for
-/// target-gated surfaces, its target toggle is on.
+/// target-gated surfaces, any target toggle that gates it is on.
 pub fn surface_enabled(
     settings: &AppSettings,
     surface: crate::setup_lifecycle::SetupSurfaceId,
 ) -> bool {
+    let gating = agent_targets::surface_target_ids(surface);
     surface
         .harness()
         .is_none_or(|harness| harness_enabled(settings, harness))
-        && agent_targets::surface_target_id(surface).is_none_or(|target_id| {
-            settings
-                .enabled_target_ids
+        && (gating.is_empty()
+            || gating
                 .iter()
-                .any(|enabled| enabled == target_id)
-        })
+                .any(|target_id| target_enabled(settings, target_id)))
+}
+
+pub fn target_enabled(settings: &AppSettings, target_id: &str) -> bool {
+    settings
+        .enabled_target_ids
+        .iter()
+        .any(|enabled| enabled == target_id)
 }
 
 pub fn enabled_setup_surfaces(
@@ -614,9 +620,9 @@ mod tests {
     use super::{
         enabled_setup_surfaces, get_settings_snapshot, get_settings_snapshot_with_mutate,
         harness_enabled, load, mutate_settings, normalize, normalize_for_save,
-        save_with_revision_check, validate_hex_color, AppSettings, MutationOutcome,
-        SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE, TARGETS_ADDED_IN,
-        TARGET_DEFAULTS_VERSION,
+        save_with_revision_check, surface_enabled, validate_hex_color, AppSettings,
+        MutationOutcome, SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE,
+        TARGETS_ADDED_IN, TARGET_DEFAULTS_VERSION,
     };
     use crate::agent_targets;
     use crate::path_utils::is_legacy_default_workspace_path;
@@ -861,6 +867,36 @@ mod tests {
             vec![SetupSurfaceId::Skills, SetupSurfaceId::WorkspaceBundle],
             "and the MCP surface on its own"
         );
+    }
+
+    #[test]
+    fn the_claude_config_surface_is_on_while_either_of_its_targets_is_on() {
+        use crate::setup_lifecycle::SetupSurfaceId;
+        let mut settings = AppSettings::default();
+        normalize(&mut settings);
+        assert!(!surface_enabled(&settings, SetupSurfaceId::ClaudeConfig));
+        for on in [
+            vec!["claude_config"],
+            vec!["claude_skill_overrides"],
+            vec!["claude_config", "claude_skill_overrides"],
+        ] {
+            let mut settings = settings.clone();
+            settings
+                .enabled_target_ids
+                .extend(on.iter().map(|id| id.to_string()));
+            assert!(
+                surface_enabled(&settings, SetupSurfaceId::ClaudeConfig),
+                "{on:?}"
+            );
+            assert!(enabled_setup_surfaces(&settings).contains(&SetupSurfaceId::ClaudeConfig));
+            settings
+                .enabled_harness_ids
+                .retain(|id| *id != agent_targets::HarnessId::Claude);
+            assert!(
+                !surface_enabled(&settings, SetupSurfaceId::ClaudeConfig),
+                "the harness switch wins"
+            );
+        }
     }
 
     #[test]

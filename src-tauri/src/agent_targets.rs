@@ -175,6 +175,16 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             target_rel: ".claude/settings.json",
             source_rel: "",
         },
+        // The second target of the same file and surface: after `claude_config`, so that
+        // `surface_target_id` keeps naming that one.
+        AgentSyncTarget {
+            id: "claude_skill_overrides",
+            label: "claude skill overrides",
+            harness: HarnessId::Claude,
+            kind: TargetKind::Config,
+            target_rel: ".claude/settings.json",
+            source_rel: "",
+        },
         AgentSyncTarget {
             id: "cursor_setup",
             label: "cursor global agents",
@@ -249,9 +259,10 @@ pub fn bundled_config_targets() -> Vec<AgentSyncTarget> {
 
 /// Targets that stay OFF until the user opts in. `codex_config` rewrites the
 /// user's approval and sandbox posture in `~/.codex/config.toml`; `claude_config` changes the
-/// attribution keys of `~/.claude/settings.json`. A light harness target is off when its
-/// descriptor says so.
-const DEFAULT_DISABLED_TARGET_IDS: &[&str] = &["codex_config", "claude_config"];
+/// attribution keys of `~/.claude/settings.json`, and `claude_skill_overrides` its
+/// `skillOverrides` keys. A light harness target is off when its descriptor says so.
+const DEFAULT_DISABLED_TARGET_IDS: &[&str] =
+    &["codex_config", "claude_config", "claude_skill_overrides"];
 
 fn default_disabled(target_id: &str) -> bool {
     DEFAULT_DISABLED_TARGET_IDS.contains(&target_id)
@@ -282,7 +293,7 @@ pub fn target_surfaces(target_id: &str) -> &'static [SetupSurfaceId] {
         "opencode_config" => &[SetupSurfaceId::OpenCodeConfig],
         "claude_rules" => &[SetupSurfaceId::ClaudeRules],
         "claude_agents" => &[SetupSurfaceId::ClaudeAgents],
-        "claude_config" => &[SetupSurfaceId::ClaudeConfig],
+        "claude_config" | "claude_skill_overrides" => &[SetupSurfaceId::ClaudeConfig],
         "cursor_setup" => &[SetupSurfaceId::CursorAgents, SetupSurfaceId::CursorMcp],
         other => crate::light_harness::rules_for_target(other)
             .map(|rules| std::slice::from_ref(&rules.surface))
@@ -294,12 +305,20 @@ pub fn target_surfaces(target_id: &str) -> &'static [SetupSurfaceId] {
     }
 }
 
-/// The target whose toggle gates `surface`, or `None` for ungated surfaces.
+/// The first target whose toggle gates `surface`, or `None` for ungated surfaces. A surface that
+/// two targets gate (`claude_config`) names the older one.
 pub fn surface_target_id(surface: SetupSurfaceId) -> Option<&'static str> {
+    surface_target_ids(surface).into_iter().next()
+}
+
+/// Every target whose toggle gates `surface`, in registry order; empty for ungated surfaces. The
+/// surface is installed while any of them is on.
+pub fn surface_target_ids(surface: SetupSurfaceId) -> Vec<&'static str> {
     targets()
         .iter()
         .map(|target| target.id)
-        .find(|id| target_surfaces(id).contains(&surface))
+        .filter(|id| target_surfaces(id).contains(&surface))
+        .collect()
 }
 
 pub fn normalize_enabled_ids(raw: &[String]) -> Vec<String> {
@@ -441,6 +460,34 @@ mod tests {
     }
 
     #[test]
+    fn claude_skill_overrides_is_a_second_target_of_the_claude_config_surface_and_off() {
+        let target = targets()
+            .into_iter()
+            .find(|target| target.id == "claude_skill_overrides")
+            .expect("claude_skill_overrides target");
+        assert_eq!(target.harness, HarnessId::Claude);
+        assert!(matches!(target.kind, TargetKind::Config));
+        assert_eq!(target.target_rel, ".claude/settings.json");
+        assert!(!default_enabled_ids().contains(&"claude_skill_overrides".to_string()));
+        assert_eq!(
+            target_surfaces("claude_skill_overrides"),
+            [SetupSurfaceId::ClaudeConfig]
+        );
+        assert_eq!(
+            surface_target_ids(SetupSurfaceId::ClaudeConfig),
+            ["claude_config", "claude_skill_overrides"]
+        );
+        assert_eq!(
+            surface_target_id(SetupSurfaceId::ClaudeConfig),
+            Some("claude_config"),
+            "the first target, which the settings migration of version 0 keeps"
+        );
+        assert!(bundled_config_targets()
+            .iter()
+            .all(|target| target.id != "claude_skill_overrides"));
+    }
+
+    #[test]
     fn default_enabled_ids_cover_every_target_except_the_opt_in_ones() {
         let mut expected: Vec<String> = targets()
             .iter()
@@ -448,7 +495,12 @@ mod tests {
             .filter(|id| {
                 !matches!(
                     id.as_str(),
-                    "codex_config" | "claude_config" | "kilo_mcp" | "antigravity_mcp" | "grok_mcp"
+                    "codex_config"
+                        | "claude_config"
+                        | "claude_skill_overrides"
+                        | "kilo_mcp"
+                        | "antigravity_mcp"
+                        | "grok_mcp"
                 )
             })
             .collect();
@@ -492,7 +544,11 @@ mod tests {
                     "{} gates a surface of another harness: {surface:?}",
                     target.id
                 );
-                assert_eq!(surface_target_id(*surface), Some(target.id));
+                assert!(
+                    surface_target_ids(*surface).contains(&target.id),
+                    "{} gates {surface:?}",
+                    target.id
+                );
             }
         }
         assert!(target_surfaces("unknown_target").is_empty());
@@ -509,6 +565,7 @@ mod tests {
             SetupSurfaceId::WorkspaceBundle,
         ] {
             assert_eq!(surface_target_id(surface), None, "{surface:?}");
+            assert!(surface_target_ids(surface).is_empty(), "{surface:?}");
         }
     }
 
@@ -626,6 +683,7 @@ mod tests {
             "opencode_config",
             "codex_config",
             "claude_config",
+            "claude_skill_overrides",
             "cursor_setup",
             "copilot_rules",
             "copilot_mcp",
@@ -639,7 +697,7 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        assert_eq!(ids, expected, "targets() must contain exactly 19 known IDs");
+        assert_eq!(ids, expected, "targets() must contain exactly 20 known IDs");
     }
 
     #[test]
@@ -662,7 +720,8 @@ mod tests {
             "descriptor order, per harness the rules file (Grok has none) and then the MCP entry, after cursor_setup"
         );
         assert_eq!(ids[ids.len() - 10], "cursor_setup");
-        assert_eq!(ids[ids.len() - 11], "claude_config");
+        assert_eq!(ids[ids.len() - 11], "claude_skill_overrides");
+        assert_eq!(ids[ids.len() - 12], "claude_config");
         assert!(!default_enabled_ids().contains(&"grok_mcp".to_string()));
         assert_eq!(target_surfaces("grok_mcp"), [SetupSurfaceId::GrokMcp]);
         let pi = all.iter().find(|t| t.id == "pi_rules").expect("pi_rules");
