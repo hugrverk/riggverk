@@ -97,6 +97,59 @@ pub(super) fn models_args(version: Option<&CliVersion>) -> &'static [&'static st
 
 static PROBE_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
+/// Where the app makes probe folders: its app data directory, created owner-only when missing.
+fn app_data_probe_root() -> std::io::Result<PathBuf> {
+    let root = crate::platform_paths::app_support_dir(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )
+    .map_err(std::io::Error::other)?;
+    crate::safe_filesystem::create_private_leaf_directory(&root).map_err(std::io::Error::other)?;
+    Ok(root)
+}
+
+#[cfg(not(test))]
+fn probe_root() -> std::io::Result<PathBuf> {
+    app_data_probe_root()
+}
+
+#[cfg(test)]
+thread_local! {
+    static PROBES_IN_APP_DATA: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Tests probe from many threads, and the app data directory follows the process environment: a
+/// probe would make its folder in the real one, or in the temp home another test has set up. They
+/// make it in the system temp folder, unless [`with_probes_in_app_data`] asks for the real place.
+#[cfg(test)]
+fn probe_root() -> std::io::Result<PathBuf> {
+    if PROBES_IN_APP_DATA.get() {
+        app_data_probe_root()
+    } else {
+        Ok(std::env::temp_dir())
+    }
+}
+
+/// Runs `f` with this thread's probes in the app data directory of a temp home, as the app makes
+/// them. Takes the env lock: for the tests that pin where a probe runs (they stub the CLI with a
+/// shell script, so they are Unix only).
+#[cfg(all(test, unix))]
+pub(super) fn with_probes_in_app_data<T>(f: impl FnOnce() -> T) -> T {
+    let _lock = crate::test_env::guard::lock();
+    let _env = crate::test_env::guard::isolate_data_location_env();
+    let home = std::env::temp_dir().join(format!(
+        "riggverk-probe-home-{}-{}",
+        std::process::id(),
+        PROBE_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ));
+    crate::test_env::set_test_user_dirs(&home);
+    PROBES_IN_APP_DATA.set(true);
+    let out = f();
+    PROBES_IN_APP_DATA.set(false);
+    let _ = std::fs::remove_dir_all(&home);
+    out
+}
+
 /// A new, empty folder for one probe to run from, owner-only (0700 on unix) and removed on drop.
 /// A folder somebody else made first at the same name (or a link there) is refused, never reused.
 pub(super) struct ProbeDir(PathBuf);
@@ -108,13 +161,7 @@ impl ProbeDir {
             .unwrap_or_default()
             .as_nanos();
         let sequence = PROBE_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let root = crate::platform_paths::app_support_dir(
-            &crate::platform_paths::PlatformEnv::from_process_env(),
-            crate::platform_paths::Platform::current(),
-        )
-        .map_err(std::io::Error::other)?;
-        crate::safe_filesystem::create_private_leaf_directory(&root)
-            .map_err(std::io::Error::other)?;
+        let root = probe_root()?;
         let path = root.join(format!(
             "riggverk-probe-{}-{nanos}-{sequence}",
             std::process::id()
@@ -678,7 +725,11 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn probes_run_from_a_fresh_private_folder_without_project_config() {
-        let _guard = crate::test_env::guard::lock();
+        with_probes_in_app_data(probes_run_from_a_fresh_private_folder);
+    }
+
+    #[cfg(unix)]
+    fn probes_run_from_a_fresh_private_folder() {
         let stub = Stub::new(
             "cwd",
             "d=\"$(dirname \"$0\")\"\npwd -P >> \"$d/cwd.txt\"\nls -ld . | cut -c1-10 >> \"$d/mode.txt\"\necho \"$OPENCODE_DISABLE_PROJECT_CONFIG\" >> \"$d/env.txt\"\necho 1.19.3",
