@@ -349,7 +349,7 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.assert_fails("templates/skills is retired")
 
     def test_description_over_300_chars_fails(self) -> None:
-        self.edit(self.skill("tdd"), "Not for unknown root causes (diagnose).", "Not for unknown root causes (diagnose). " + "x" * 80)
+        self.edit(self.skill("tdd"), "Not for unknown root causes (diagnose).", "Not for unknown root causes (diagnose). " + "x" * 300)
         self.assert_fails("description is")
 
     def test_description_without_use_when_fails(self) -> None:
