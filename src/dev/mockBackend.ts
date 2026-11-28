@@ -28,7 +28,7 @@
  */
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC } from "@tauri-apps/api/mocks";
-import { harnessForSurface, isLightAgent } from "../lib/harnessInstallation";
+import { harnessForSurface, isLightAgent, isSurfaceEnabled, RETIRING_SURFACES } from "../lib/harnessInstallation";
 import { ownWhen, routingLine, whenProblem } from "../views/library/routing";
 import { INSTALL_AGENTS } from "../types";
 import { version as APP_VERSION } from "../../package.json";
@@ -142,6 +142,7 @@ const TARGETS: AgentTargetMeta[] = [
   { id: "opencode_config", label: "opencode config", harness: "opencode", kind: "config", target_rel: ".config/opencode/opencode.json", source_rel: "templates/opencode.json" },
   { id: "codex_config", label: "codex config", harness: "codex", kind: "config", target_rel: ".codex/config.toml", source_rel: "templates/codex/config.toml" },
   { id: "claude_config", label: "claude config", harness: "claude", kind: "config", target_rel: ".claude/settings.json", source_rel: "" },
+  { id: "claude_skill_overrides", label: "claude skill overrides", harness: "claude", kind: "config", target_rel: ".claude/settings.json", source_rel: "" },
   { id: "cursor_setup", label: "cursor global agents", harness: "cursor", kind: "agents", target_rel: ".cursor/agents", source_rel: "templates/cursor/agents" },
   { id: "copilot_rules", label: "copilot rules", harness: "copilot", kind: "rules", target_rel: ".copilot/copilot-instructions.md", source_rel: "templates/sync/copilot-rules.md" },
   { id: "copilot_mcp", label: "copilot mcp", harness: "copilot", kind: "mcp", target_rel: ".copilot/mcp-config.json", source_rel: "templates/mcp/copilot.playwright.json" },
@@ -163,6 +164,7 @@ let settings: AppSettings = {
     id =>
       (id !== "codex_config" || scenario === "conflict") &&
       id !== "claude_config" &&
+      id !== "claude_skill_overrides" &&
       id !== "kilo_mcp" &&
       id !== "antigravity_mcp" &&
       id !== "grok_mcp",
@@ -1120,6 +1122,14 @@ let setupPreview: { surfaces: SetupSurfaceId[]; fingerprint: string; token: stri
 const installSnapshots = new Map<string, Array<[SetupSurfaceId, InstallationState]>>();
 /** The rules files an install run wrote over, by transaction, so its rollback puts them back too. */
 const installRulesSnapshots = new Map<string, Array<[RulesSurfaceId, RulesStatus]>>();
+
+/**
+ * Like the backend's gate for a surface the UI names with its targets off (`RETIRING_SURFACES`): it is planned only
+ * while the app's values are still in the file. The mock writes none there, so it drops the surface.
+ */
+function gateRetiring(surfaces: SetupSurfaceId[]): SetupSurfaceId[] {
+  return surfaces.filter(surface => !RETIRING_SURFACES.includes(surface) || isSurfaceEnabled(settings, surface));
+}
 
 function previewSetup(surfaces: SetupSurfaceId[]): SetupPlan {
   const plan = setupPlan(surfaces);
@@ -2124,12 +2134,12 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return diagnostics();
     case "get_installation_status":
       await delay(120);
-      return scenario === "error" ? unavailable() : installationStatus(arg<SetupSurfaceId[]>(args, "surfaces"));
+      return scenario === "error" ? unavailable() : installationStatus(gateRetiring(arg<SetupSurfaceId[]>(args, "surfaces")));
     case "preview_setup":
       await delay(200);
-      return previewSetup(arg<SetupSurfaceId[]>(args, "surfaces"));
+      return previewSetup(gateRetiring(arg<SetupSurfaceId[]>(args, "surfaces")));
     case "apply_setup": {
-      const surfaces = arg<SetupSurfaceId[]>(args, "surfaces");
+      const surfaces = gateRetiring(arg<SetupSurfaceId[]>(args, "surfaces"));
       checkSetupPreview(surfaces, arg<string | null>(args, "planFingerprint"), arg<string | null>(args, "previewToken"));
       const pending = surfaces.filter(surface => ["not_installed", "update_available"].includes(surfaceStates.get(surface) ?? ""));
       await emitProgress("apply_setup", pending.flatMap(surfaceFiles));

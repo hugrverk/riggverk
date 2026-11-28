@@ -12,7 +12,7 @@ import {
 } from "../types";
 
 /**
- * Every surface of a harness, regardless of target toggles. Use `enabledSurfacesForHarness` to install.
+ * Every surface of a harness, regardless of target toggles. Use `requestedSurfacesForHarness` to install.
  * `skills` is listed for every harness but belongs to none: one global surface installs into the folders
  * all the enabled harnesses read. The light harnesses (Copilot, Pi, Kilo, Antigravity) add one rules file and one MCP entry each;
  * Grok reads Claude Code's rules file, so it adds only its MCP entry.
@@ -42,6 +42,7 @@ export type SetupTargetId =
   | "claude_rules"
   | "claude_agents"
   | "claude_config"
+  | "claude_skill_overrides"
   | "cursor_setup"
   | "copilot_rules"
   | "copilot_mcp"
@@ -55,7 +56,7 @@ export type SetupTargetId =
 
 /**
  * Surfaces gated by each target toggle. Mirrors `agent_targets::target_surfaces` in the backend.
- * `skills` and `workspace_bundle` are never gated.
+ * `skills` and `workspace_bundle` are never gated. `claude_config` has two targets: the surface is on while either is.
  */
 export const TARGET_SURFACES: Record<SetupTargetId, readonly SetupSurfaceId[]> = {
   codex_rules: ["codex_rules"],
@@ -67,6 +68,7 @@ export const TARGET_SURFACES: Record<SetupTargetId, readonly SetupSurfaceId[]> =
   claude_rules: ["claude_rules"],
   claude_agents: ["claude_agents"],
   claude_config: ["claude_config"],
+  claude_skill_overrides: ["claude_config"],
   cursor_setup: ["cursor_agents", "cursor_mcp"],
   copilot_rules: ["copilot_rules"],
   copilot_mcp: ["copilot_mcp"],
@@ -81,11 +83,18 @@ export const TARGET_SURFACES: Record<SetupTargetId, readonly SetupSurfaceId[]> =
 
 /**
  * Targets that start OFF: `codex_config` rewrites the user's Codex approval/sandbox posture, `claude_config` changes
- * how Claude Code attributes commits and pull requests in `~/.claude/settings.json`, `kilo_mcp` edits Kilo's main
- * config file, which may hold provider keys, `antigravity_mcp` is opt-in like Kilo's, and `grok_mcp` edits
- * `~/.grok/config.toml`, which may hold `api_key`.
+ * how Claude Code attributes commits and pull requests in `~/.claude/settings.json`, `claude_skill_overrides` sets
+ * `skillOverrides` in the same file, `kilo_mcp` edits Kilo's main config file, which may hold provider keys,
+ * `antigravity_mcp` is opt-in like Kilo's, and `grok_mcp` edits `~/.grok/config.toml`, which may hold `api_key`.
  */
-const DEFAULT_DISABLED_TARGET_IDS: readonly SetupTargetId[] = ["codex_config", "claude_config", "kilo_mcp", "antigravity_mcp", "grok_mcp"];
+const DEFAULT_DISABLED_TARGET_IDS: readonly SetupTargetId[] = [
+  "codex_config",
+  "claude_config",
+  "claude_skill_overrides",
+  "kilo_mcp",
+  "antigravity_mcp",
+  "grok_mcp",
+];
 
 /** Target ids in backend registry order (`agent_targets::targets`), which settings normalize to. */
 const TARGET_IDS_REGISTRY_ORDER: readonly SetupTargetId[] = [
@@ -98,6 +107,7 @@ const TARGET_IDS_REGISTRY_ORDER: readonly SetupTargetId[] = [
   "opencode_config",
   "codex_config",
   "claude_config",
+  "claude_skill_overrides",
   "cursor_setup",
   "copilot_rules",
   "copilot_mcp",
@@ -115,11 +125,22 @@ export const DEFAULT_ENABLED_TARGET_IDS: readonly SetupTargetId[] = TARGET_IDS_R
   (id) => !DEFAULT_DISABLED_TARGET_IDS.includes(id),
 );
 
-/** The target toggle gating `surface`, or null for ungated surfaces (skills, workspace bundle). */
-export function targetIdForSurface(surface: SetupSurfaceId): SetupTargetId | null {
-  const ids = Object.keys(TARGET_SURFACES) as SetupTargetId[];
-  return ids.find((id) => TARGET_SURFACES[id].includes(surface)) ?? null;
+/** Every target toggle gating `surface`, in registry order; empty for ungated surfaces. Mirrors `agent_targets::surface_target_ids`. */
+export function targetIdsForSurface(surface: SetupSurfaceId): SetupTargetId[] {
+  return TARGET_IDS_REGISTRY_ORDER.filter((id) => TARGET_SURFACES[id].includes(surface));
 }
+
+/** The first target toggle gating `surface`, or null for ungated surfaces (skills, workspace bundle). */
+export function targetIdForSurface(surface: SetupSurfaceId): SetupTargetId | null {
+  return targetIdsForSurface(surface)[0] ?? null;
+}
+
+/**
+ * Surfaces whose values the app removes at the next update once every target gating them is off. An update or a
+ * status request of an enabled harness names them even then; the backend plans one only while the file still holds
+ * the app's values, and drops it otherwise. Mirrors `retiring_surfaces` in `commands/setup.rs`.
+ */
+export const RETIRING_SURFACES: readonly SetupSurfaceId[] = ["claude_config"];
 
 /** The harness a surface belongs to, or null for `skills` and `workspace_bundle`. */
 export function harnessForSurface(surface: SetupSurfaceId): InstallAgent | null {
@@ -131,13 +152,13 @@ type EnabledSettings = Pick<AppSettings, "enabled_target_ids" | "enabled_harness
 
 /**
  * Mirrors `settings::surface_enabled`: the surface's harness is enabled and, for
- * target-gated surfaces, its target toggle is on.
+ * target-gated surfaces, any target toggle that gates it is on.
  */
 export function isSurfaceEnabled(settings: EnabledSettings, surface: SetupSurfaceId): boolean {
   const harness = harnessForSurface(surface);
   if (harness && !settings.enabled_harness_ids.includes(harness)) return false;
-  const targetId = targetIdForSurface(surface);
-  return targetId === null || settings.enabled_target_ids.includes(targetId);
+  const targetIds = targetIdsForSurface(surface);
+  return targetIds.length === 0 || targetIds.some((id) => settings.enabled_target_ids.includes(id));
 }
 
 /** Whether the harness page `harness` offers `surface`: a disabled harness offers nothing, `skills` included. */
@@ -151,6 +172,17 @@ export function enabledSurfacesForHarness(
   settings: EnabledSettings,
 ): SetupSurfaceId[] {
   return HARNESS_SURFACES[harness].filter((surface) => isSurfaceEnabledFor(harness, settings, surface));
+}
+
+/** What an update or a status request of a harness names: the enabled surfaces, and while the harness is on its `RETIRING_SURFACES`. */
+export function requestedSurfacesForHarness(
+  harness: InstallAgent,
+  settings: EnabledSettings,
+): SetupSurfaceId[] {
+  const on = settings.enabled_harness_ids.includes(harness);
+  return HARNESS_SURFACES[harness].filter(
+    (surface) => isSurfaceEnabledFor(harness, settings, surface) || (on && RETIRING_SURFACES.includes(surface)),
+  );
 }
 
 /** Per-surface on/off state for a harness page; `targetId` names the toggle that gates it (null = never gated). */
@@ -214,6 +246,16 @@ export function enabledSetupSurfaces(settings: EnabledSettings): SetupSurfaceId[
     ...new Set([
       ...WORKSPACE_SURFACES,
       ...INSTALL_AGENTS.flatMap((harness) => enabledSurfacesForHarness(harness, settings)),
+    ]),
+  ];
+}
+
+/** `enabledSetupSurfaces` with each enabled harness's `RETIRING_SURFACES`: the request of an "update all". */
+export function requestedSetupSurfaces(settings: EnabledSettings): SetupSurfaceId[] {
+  return [
+    ...new Set([
+      ...WORKSPACE_SURFACES,
+      ...INSTALL_AGENTS.flatMap((harness) => requestedSurfacesForHarness(harness, settings)),
     ]),
   ];
 }

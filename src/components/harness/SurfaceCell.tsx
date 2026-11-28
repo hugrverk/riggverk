@@ -12,6 +12,8 @@ export interface SurfaceCellToggle {
   disabled?: boolean | string;
   /** What the switch also gates ("also mcp"), told under it. */
   note?: string | null;
+  /** The words beside the switch; "Let Riggverk manage this" when not given. */
+  text?: string;
 }
 
 export interface SurfaceCellProps {
@@ -35,6 +37,8 @@ export interface SurfaceCellProps {
   /** Focus or a click landed in the cell: its surface becomes the one the page keys act on. */
   onActivate?: () => void;
   toggle?: SurfaceCellToggle | null;
+  /** Further switches of other targets that gate the same surface, after `toggle`. */
+  moreToggles?: readonly SurfaceCellToggle[];
   /** Detail under the headline (the rules file, the files in conflict, the Codex keys). */
   children?: ReactNode;
   /** Buttons for the cell's actions. */
@@ -58,21 +62,25 @@ export function SurfaceCell({
   active = false,
   onActivate,
   toggle,
+  moreToggles = [],
   children,
   actions,
 }: SurfaceCellProps) {
   const baseId = useId();
   const labelId = `${baseId}-label`;
   // A wide cell (a decision) tells the switch last, after the detail and the buttons: the decision comes first.
-  const setting = toggle && (
-    <div className="hp-setting">
-      <span>
-        Let Riggverk manage this
-        {toggle.note && <span className="hp-setting-note">{toggle.note}</span>}
-      </span>
-      <Switch checked={toggle.checked} label={toggle.label} onChange={toggle.onChange} disabled={toggle.disabled} />
-    </div>
-  );
+  const toggles = [...(toggle ? [toggle] : []), ...moreToggles];
+  const setting =
+    toggles.length > 0 &&
+    toggles.map(item => (
+      <div className="hp-setting" key={item.label}>
+        <span>
+          {item.text ?? "Let Riggverk manage this"}
+          {item.note && <span className="hp-setting-note">{item.note}</span>}
+        </span>
+        <Switch checked={item.checked} label={item.label} onChange={item.onChange} disabled={item.disabled} />
+      </div>
+    ));
   return (
     <article
       className={cx("hp-cell", wide && "hp-span3", tail && "hp-tail")}

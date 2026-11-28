@@ -59,6 +59,11 @@ export interface HarnessPageProps extends HarnessViewProps {
   installBlockedBy?: string;
 }
 
+/** The words beside the switch of a further target of a surface: what it manages beside the first. */
+const MORE_TARGET_TEXT: Partial<Record<string, string>> = {
+  claude_skill_overrides: "List on-request skills by name only",
+};
+
 /** The decision first, then what has to be fixed by hand, then the rest in reading order. */
 const STATE_RANK: Partial<Record<UiState, number>> = { decide: 0, fix: 1 };
 
@@ -371,6 +376,12 @@ export function HarnessPage({
               }
             : null
         }
+        moreToggles={row.moreTargets.map(more => ({
+          checked: more.enabled,
+          label: `Let Riggverk manage ${more.target?.label ?? more.targetId}`,
+          onChange: () => onToggleTarget(more.targetId),
+          text: MORE_TARGET_TEXT[more.targetId] ?? "Let Riggverk manage this too",
+        }))}
       >
         {isRules && (
           <RulesDecision

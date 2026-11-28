@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  enabledSurfacesForHarness,
   HARNESS_NAV_ORDER,
   HARNESS_SURFACES,
+  requestedSurfacesForHarness,
   WORKSPACE_SURFACES,
 } from "../lib/harnessInstallation";
 import type { InstallationStatus, InstallAgent, SetupSurfaceId } from "../types";
@@ -34,7 +34,8 @@ export interface UseInstallationOverviewOptions {
   enabledHarnessIds: readonly InstallAgent[];
   /**
    * Enabled target toggles. When given, surfaces whose target is off are not requested (the pages list them as
-   * "off"), so the state shown matches what an update would touch. Omit to request every surface of a harness.
+   * "off"), so the state shown matches what an update would touch; a `RETIRING_SURFACES` one is, and comes back only
+   * while the app still has values to remove there. Omit to request every surface of a harness.
    */
   enabledTargetIds?: readonly string[];
   /** Bump to force a re-fetch (e.g. after a model save). */
@@ -44,7 +45,7 @@ export interface UseInstallationOverviewOptions {
 export function surfacesForOverview(id: OverviewId, enabledTargetIds?: readonly string[]): SetupSurfaceId[] {
   if (id === "workspace") return WORKSPACE_SURFACES;
   if (!enabledTargetIds) return HARNESS_SURFACES[id];
-  return enabledSurfacesForHarness(id, { enabled_target_ids: [...enabledTargetIds], enabled_harness_ids: [id] });
+  return requestedSurfacesForHarness(id, { enabled_target_ids: [...enabledTargetIds], enabled_harness_ids: [id] });
 }
 
 /**
