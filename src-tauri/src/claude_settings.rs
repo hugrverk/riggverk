@@ -322,6 +322,14 @@ impl Leaves {
     fn is_empty(&self) -> bool {
         *self == Leaves::default()
     }
+
+    /// Whether the write adds or removes anything of the overrides.
+    pub fn touches_overrides(&self) -> bool {
+        !self.added.is_empty()
+            || !self.removed.is_empty()
+            || self.created_object
+            || self.dropped_object
+    }
 }
 
 /// How the file stands against what the targets want and what the app owns.
@@ -499,8 +507,9 @@ fn add_overrides(config: &mut Map<String, Value>, leaves: &mut Leaves) {
     }
 }
 
-/// Removes the owned leaves (`owned` holds only those still as the app wrote them), and the
-/// object when the app created it and nothing is left in it.
+/// Removes the owned leaves (`owned` holds only those still as the app wrote them), and with
+/// them the object when the app created it and nothing is left in it. An object the user emptied
+/// by hand stays: a write never only drops it.
 fn remove_overrides(config: &mut Map<String, Value>, owned: &Owned, leaves: &mut Leaves) {
     let Some(Value::Object(overrides)) = config.get_mut(OVERRIDES) else {
         return;
@@ -512,7 +521,7 @@ fn remove_overrides(config: &mut Map<String, Value>, owned: &Owned, leaves: &mut
             leaves.removed.push(path);
         }
     }
-    if overrides.is_empty() && owned.contains_key(OVERRIDES) {
+    if overrides.is_empty() && owned.contains_key(OVERRIDES) && !leaves.removed.is_empty() {
         config.shift_remove(OVERRIDES);
         leaves.dropped_object = true;
     }

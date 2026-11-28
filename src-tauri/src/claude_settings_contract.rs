@@ -886,6 +886,81 @@ mod tests {
     }
 
     #[test]
+    fn a_change_to_the_file_after_the_preview_stops_the_apply_and_the_uninstall() {
+        let env = Env::new("overrides-stale");
+        env.set_target(OVERRIDES_TARGET, true);
+        env.write_settings(USER_FILE);
+        let plan = preview_setup(vec![SURFACE.to_string()]).expect("preview");
+        let mut config = parse(USER_FILE);
+        config.insert("skillOverrides".into(), serde_json::json!({"retro": "off"}));
+        env.write_settings(&serde_json::to_string_pretty(&Value::Object(config)).unwrap());
+        let Err(error) = apply_setup(
+            vec![SURFACE.to_string()],
+            false,
+            plan.plan_fingerprint,
+            plan.preview_token,
+        ) else {
+            panic!("a stale review is refused");
+        };
+        assert!(error.contains("fingerprint"), "{error}");
+        assert!(!env.read_settings().contains("grill-me"));
+
+        env.apply_surfaces(&[SURFACE, "claude_rules"]);
+        let plan = preview_uninstall().expect("uninstall preview");
+        let mut config = parse(&env.read_settings());
+        config.insert("theme".into(), Value::String("dark".into()));
+        env.write_settings(&serde_json::to_string_pretty(&Value::Object(config)).unwrap());
+        let Err(error) = apply_uninstall(plan.plan_fingerprint, plan.preview_token) else {
+            panic!("a stale uninstall is refused");
+        };
+        assert!(error.contains("changed since preview"), "{error}");
+        assert!(env.read_settings().contains("grill-me"));
+    }
+
+    #[test]
+    fn undo_of_an_add_takes_the_leaves_out_and_keeps_a_later_edit() {
+        let env = Env::new("overrides-undo-add");
+        env.set_target(SURFACE, false);
+        env.set_target(OVERRIDES_TARGET, true);
+        env.write_settings(USER_FILE);
+        let result = env.apply();
+        assert_eq!(env.owned_paths().len(), 8);
+        let mut config = parse(&env.read_settings());
+        config.insert("theme".into(), Value::String("dark".into()));
+        env.write_settings(&serde_json::to_string_pretty(&Value::Object(config)).unwrap());
+
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "rollback: {}", rolled.message);
+        let restored = parse(&env.read_settings());
+        assert_eq!(
+            keys(&restored),
+            ["env", "permissions", "hooks", "model", "theme"],
+            "the leaves and the object the apply created are gone"
+        );
+        assert!(env.owned_paths().is_empty(), "the record is as before");
+    }
+
+    #[test]
+    fn a_conflict_keeps_a_retiring_surface_in_view_with_its_reason() {
+        let env = Env::new("overrides-retiring-conflict");
+        env.set_target(SURFACE, false);
+        env.set_target(OVERRIDES_TARGET, true);
+        env.write_settings(USER_FILE);
+        env.apply();
+        env.set_target(OVERRIDES_TARGET, false);
+        let text = env
+            .read_settings()
+            .replacen('{', "{\n  // SECRET-MARKER", 1);
+        env.write_settings(&text);
+        let plan = preview_setup(vec![SURFACE.to_string()]).expect("preview");
+        assert!(!plan.has_pending_changes);
+        let review = env.plan_text();
+        assert!(review.contains("the file has comments"), "{review}");
+        assert!(!review.contains("SECRET-MARKER"), "{review}");
+        assert_eq!(env.read_settings(), text);
+    }
+
+    #[test]
     fn a_file_the_app_created_stays_when_a_strip_empties_it() {
         let env = Env::new("overrides-created-file");
         env.set_target(SURFACE, false);

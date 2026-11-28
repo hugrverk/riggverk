@@ -450,11 +450,7 @@ fn record_claude_settings_values(
         );
     }
     let owned_before = before.and_then(|before| before.owned_values.as_ref());
-    let touched = !leaves.added.is_empty()
-        || !leaves.removed.is_empty()
-        || leaves.created_object
-        || leaves.dropped_object;
-    record.owned_values = if touched || owned_before.is_some() {
+    record.owned_values = if leaves.touches_overrides() || owned_before.is_some() {
         let owned = crate::claude_settings::owned_after(owned_before, leaves);
         let installed = artifact
             .resolve_dest(home, runtime_root)

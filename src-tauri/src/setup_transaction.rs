@@ -959,9 +959,14 @@ pub fn compute_plan_fingerprint_with(
         parts.push(format!("installed:{installed_digest}"));
         if let Some(op) = artifact_ops.iter().find(|o| o.artifact == *artifact) {
             parts.push(format!("operation:{:?}", op.kind));
-            // The managed digest of settings.json covers the attribution values only; what the
-            // write does to the rest (the overrides) is the content it was planned to write.
-            if let (Some(rewrite), Some(_)) = (&op.rules_rewrite, &op.settings) {
+            // The managed digest of settings.json covers the attribution values only; what a
+            // write of the overrides does is the content it was planned to write.
+            if let (Some(rewrite), Some(true)) = (
+                &op.rules_rewrite,
+                op.settings
+                    .as_ref()
+                    .map(crate::claude_settings::Leaves::touches_overrides),
+            ) {
                 parts.push(format!(
                     "content:{}:{}",
                     rewrite.expected_installed_digest,
@@ -1967,14 +1972,33 @@ fn claude_settings_mcp_plan(outcome: Result<crate::claude_settings::Outcome, ()>
     }
 }
 
-/// Whether the next Update still removes values of the app from `settings.json` while every
-/// target of the surface is off: the Claude harness is on and the record owns a leaf that still
-/// holds what the app wrote. Such a surface is planned although its targets are off.
+/// Whether the record of `settings.json` owns any override. Without one the file is not read for
+/// them: a user who never turned the target on sees nothing of this.
+fn claude_settings_owns_overrides(workspace_root: &Path) -> bool {
+    let identity = crate::managed_state::artifact_identity(&ArtifactId::ClaudeSettings);
+    crate::managed_state::read_managed_state(workspace_root).is_some_and(|state| {
+        state.artifacts.iter().any(|record| {
+            record.identity == identity
+                && record
+                    .owned_values
+                    .as_ref()
+                    .is_some_and(|owned| !owned.is_empty())
+        })
+    })
+}
+
+/// Whether the next Update still has to remove values of the app from `settings.json` while every
+/// target of the surface is off: the Claude harness is on, the record owns a leaf that still holds
+/// what the app wrote, or the file is in a conflict that keeps it from being cleaned up (shown with
+/// its reason). Such a surface is planned although its targets are off.
 pub(crate) fn claude_settings_retiring(workspace_root: &Path, home: &Path) -> bool {
-    matches!(
-        claude_settings_plan_now(workspace_root, home),
-        Some(crate::claude_settings::Outcome::Write { leaves, .. }) if !leaves.removed.is_empty()
-    )
+    use crate::claude_settings::Outcome;
+    claude_settings_owns_overrides(workspace_root)
+        && match claude_settings_plan_now(workspace_root, home) {
+            Some(Outcome::Write { leaves, .. }) => !leaves.removed.is_empty(),
+            Some(Outcome::Conflict(_)) => true,
+            _ => false,
+        }
 }
 
 /// Why `settings.json` is left alone, for the review: `CLAUDE_CONFIG_DIR` is set, the file is not
@@ -2201,7 +2225,10 @@ pub fn plan_artifacts_for_uninstall(
                 .resolve_dest(home, workspace_root)
                 .map(|dest| dest.is_file())
                 .unwrap_or(false);
-            if exists && artifact == ArtifactId::ClaudeSettings {
+            if exists
+                && artifact == ArtifactId::ClaudeSettings
+                && claude_settings_owns_overrides(workspace_root)
+            {
                 // The overrides the app wrote go, whatever the targets say; the attribution
                 // values stay.
                 let identity = crate::managed_state::artifact_identity(&artifact);
