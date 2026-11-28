@@ -266,6 +266,9 @@ pub struct PlannedArtifact {
     /// Set only by [`plan_take_bundled`]: the user's file in conflict is replaced by the bundled one,
     /// and only while it is still the file the user reviewed. `None` for every regular plan.
     pub overwrite: Option<Overwrite>,
+    /// Claude's `settings.json` only, on a write: the leaves it adds and removes. The content
+    /// itself is in `rules_rewrite`, and is written only over the file it was computed from.
+    pub settings: Option<crate::claude_settings::Leaves>,
 }
 
 /// A skill or agent file the user chose to replace by the bundled version (their version is backed
@@ -956,6 +959,15 @@ pub fn compute_plan_fingerprint_with(
         parts.push(format!("installed:{installed_digest}"));
         if let Some(op) = artifact_ops.iter().find(|o| o.artifact == *artifact) {
             parts.push(format!("operation:{:?}", op.kind));
+            // The managed digest of settings.json covers the attribution values only; what the
+            // write does to the rest (the overrides) is the content it was planned to write.
+            if let (Some(rewrite), Some(_)) = (&op.rules_rewrite, &op.settings) {
+                parts.push(format!(
+                    "content:{}:{}",
+                    rewrite.expected_installed_digest,
+                    crate::stable_digest::bytes(rewrite.content.as_bytes())
+                ));
+            }
         }
     }
     stable_fingerprint(&parts)
@@ -1241,10 +1253,12 @@ struct McpPlan {
     state: Option<crate::light_mcp::EntryState>,
     kind: OperationKind,
     previous_state: PreviousState,
+    /// Claude's `settings.json` only, on a write: the content and the leaves it changes.
+    settings: Option<(RulesRewrite, crate::claude_settings::Leaves)>,
 }
 
-/// Plans the managed entry of a light harness's MCP file, or the attribution values of Claude's
-/// `settings.json`; `None` for any other artifact.
+/// Plans the managed entry of a light harness's MCP file; `None` for any other artifact (Claude's
+/// `settings.json` is planned by [`plan_claude_settings`]).
 ///
 /// A file without the entry is merged into (never created over, so a rollback cannot delete the
 /// user's file). An entry of that name that differs is the user's own unless a record proves the
@@ -1258,15 +1272,6 @@ fn plan_mcp_artifact(
     managed_hash: Option<&str>,
 ) -> Option<McpPlan> {
     use crate::light_mcp::EntryState;
-    if artifact == &ArtifactId::ClaudeSettings {
-        return Some(plan_claude_settings(
-            artifact,
-            workspace_root,
-            bundled_root,
-            home,
-            managed_hash,
-        ));
-    }
     if !matches!(artifact, ArtifactId::HarnessMcp(_)) {
         return None;
     }
@@ -1275,6 +1280,7 @@ fn plan_mcp_artifact(
             state: None,
             kind: OperationKind::Unavailable,
             previous_state: PreviousState::Unavailable,
+            settings: None,
         });
     };
     let (kind, previous_state) = match state {
@@ -1298,6 +1304,7 @@ fn plan_mcp_artifact(
         state: Some(state),
         kind,
         previous_state,
+        settings: None,
     })
 }
 
@@ -1453,6 +1460,7 @@ pub fn conversion_operation(
         mcp: None,
         file: None,
         overwrite: None,
+        settings: None,
     }
 }
 
@@ -1578,6 +1586,7 @@ pub fn take_bundled_operations(
                 overwrite: Some(Overwrite {
                     expected_installed_digest: installed,
                 }),
+                settings: None,
             });
         }
     }
@@ -1832,51 +1841,152 @@ fn claude_settings_outcome(dest: &Path, owned: bool) -> (OperationKind, Previous
     }
 }
 
-/// Plans `settings.json`. The record owns the values only while they are still what the app
-/// wrote (the constant projection).
-fn plan_claude_settings(
-    artifact: &ArtifactId,
+/// Which groups of values of `settings.json` the enabled targets want, from the settings file:
+/// nothing while the Claude harness is off. `None` when the settings cannot be read, so nothing
+/// is ever removed from a guess.
+pub(crate) fn claude_settings_wanted() -> Option<(crate::claude_settings::Wanted, bool)> {
+    let settings = crate::settings::try_load().ok()?;
+    let harness =
+        crate::settings::harness_enabled(&settings, crate::agent_targets::HarnessId::Claude);
+    let on = |id: &str| harness && crate::settings::target_enabled(&settings, id);
+    Some((
+        crate::claude_settings::Wanted {
+            attribution: on("claude_config"),
+            overrides: on("claude_skill_overrides"),
+        },
+        harness,
+    ))
+}
+
+/// How `settings.json` stands against `wanted` and the record of the app: whether the record
+/// owns the attribution values (only while they are the constant projection), and the leaves it
+/// owns (none while the Claude harness is off: turning it off never removes anything).
+fn claude_settings_plan_with(
     workspace_root: &Path,
-    bundled_root: &Path,
     home: &Path,
-    managed_hash: Option<&str>,
-) -> McpPlan {
-    let Ok(dest) = artifact.resolve_dest(home, workspace_root) else {
-        return McpPlan {
-            state: None,
-            kind: OperationKind::Unavailable,
-            previous_state: PreviousState::Unavailable,
-        };
-    };
-    let owned = managed_hash.is_some_and(|hash| {
+    bundled_root: &Path,
+    record: Option<&crate::managed_state::ManagedArtifactRecord>,
+    wanted: crate::claude_settings::Wanted,
+    harness: bool,
+) -> Result<crate::claude_settings::Outcome, ()> {
+    let artifact = ArtifactId::ClaudeSettings;
+    let dest = artifact
+        .resolve_dest(home, workspace_root)
+        .map_err(|_| ())?;
+    if crate::claude_settings::config_dir_override() {
+        return Ok(crate::claude_settings::Outcome::Conflict(
+            crate::claude_settings::CONFIG_DIR_REASON.to_string(),
+        ));
+    }
+    let attribution_owned = record.is_some_and(|record| {
         crate::setup_fingerprint::artifact_source_digest(
-            artifact,
+            &artifact,
             &crate::skill_sources::BundleOnly(bundled_root),
             home,
         )
-        .is_ok_and(|expected| expected == hash)
+        .is_ok_and(|expected| expected == record.hash)
     });
-    let (kind, previous_state) = claude_settings_outcome(&dest, owned);
+    let owned = record
+        .filter(|_| harness)
+        .and_then(|record| record.owned_values.clone())
+        .unwrap_or_default();
+    Ok(crate::claude_settings::plan(
+        &dest,
+        wanted,
+        attribution_owned,
+        &owned,
+    ))
+}
+
+/// [`claude_settings_plan_with`] for the targets as the settings have them now.
+fn claude_settings_plan(
+    workspace_root: &Path,
+    home: &Path,
+    bundled_root: &Path,
+    records: &[crate::managed_state::ManagedArtifactRecord],
+) -> Result<crate::claude_settings::Outcome, ()> {
+    let (wanted, harness) = claude_settings_wanted().ok_or(())?;
+    let identity = crate::managed_state::artifact_identity(&ArtifactId::ClaudeSettings);
+    let record = records.iter().find(|record| record.identity == identity);
+    claude_settings_plan_with(workspace_root, home, bundled_root, record, wanted, harness)
+}
+
+/// The plan of `settings.json` from the records on disk; `None` when it cannot be made.
+fn claude_settings_plan_now(
+    workspace_root: &Path,
+    home: &Path,
+) -> Option<crate::claude_settings::Outcome> {
+    let managed = crate::managed_state::read_managed_state(workspace_root);
+    let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
+    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root).ok()?;
+    claude_settings_plan(workspace_root, home, &bundled_root, &records).ok()
+}
+
+fn claude_settings_mcp_plan(outcome: Result<crate::claude_settings::Outcome, ()>) -> McpPlan {
+    use crate::claude_settings::Outcome;
+    let (kind, previous_state, settings) = match outcome {
+        Err(()) => (OperationKind::Unavailable, PreviousState::Unavailable, None),
+        Ok(Outcome::Write {
+            leaves,
+            content,
+            expected_installed_digest,
+        }) => {
+            let (kind, previous_state) =
+                if expected_installed_digest == crate::setup_fingerprint::ABSENT_DIGEST {
+                    (OperationKind::Create, PreviousState::Absent)
+                } else {
+                    (OperationKind::Update, PreviousState::MergeableConfigFile)
+                };
+            let rewrite = RulesRewrite {
+                content,
+                expected_installed_digest,
+            };
+            (kind, previous_state, Some((rewrite, leaves)))
+        }
+        Ok(Outcome::Current { file: true }) => (
+            OperationKind::NoChange,
+            PreviousState::MergeableConfigFile,
+            None,
+        ),
+        Ok(Outcome::Current { file: false }) => {
+            (OperationKind::NoChange, PreviousState::Absent, None)
+        }
+        // The user's own choice is never written, and never recorded as the app's.
+        Ok(Outcome::UsersAttribution) => (
+            OperationKind::Manual,
+            PreviousState::MergeableConfigFile,
+            None,
+        ),
+        Ok(Outcome::Conflict(_)) => (OperationKind::Conflict, PreviousState::Conflict, None),
+    };
     McpPlan {
         state: None,
         kind,
         previous_state,
+        settings,
     }
 }
 
+/// Whether the next Update still removes values of the app from `settings.json` while every
+/// target of the surface is off: the Claude harness is on and the record owns a leaf that still
+/// holds what the app wrote. Such a surface is planned although its targets are off.
+pub(crate) fn claude_settings_retiring(workspace_root: &Path, home: &Path) -> bool {
+    matches!(
+        claude_settings_plan_now(workspace_root, home),
+        Some(crate::claude_settings::Outcome::Write { leaves, .. }) if !leaves.removed.is_empty()
+    )
+}
+
 /// Why `settings.json` is left alone, for the review: `CLAUDE_CONFIG_DIR` is set, the file is not
-/// strict JSON, or `attribution` has a type nobody writes. Only fixed phrases.
+/// strict JSON, or `attribution` or `skillOverrides` has a type nobody writes. Only fixed phrases.
 pub(crate) fn claude_settings_conflict_reason(
     workspace_root: &Path,
     home: &Path,
 ) -> Option<String> {
-    if crate::claude_settings::config_dir_override() {
-        return Some(crate::claude_settings::CONFIG_DIR_REASON.to_string());
+    match claude_settings_plan_now(workspace_root, home)? {
+        crate::claude_settings::Outcome::Conflict(reason) => Some(reason),
+        _ => None,
     }
-    let dest = ArtifactId::ClaudeSettings
-        .resolve_dest(home, workspace_root)
-        .ok()?;
-    crate::claude_settings::conflict_reason(&crate::claude_settings::assess(&dest))
 }
 
 /// Why `opencode.json` is left alone, for the review, when its text is the reason: it has
@@ -2122,6 +2232,7 @@ pub fn plan_artifacts_for_uninstall(
                 mcp: None,
                 file: None,
                 overwrite: None,
+                settings: None,
             });
         } else {
             preserved.push(artifact);
@@ -2177,6 +2288,7 @@ pub fn plan_artifacts_for_uninstall(
                     mcp: None,
                     file: None,
                     overwrite: None,
+                    settings: None,
                 });
             }
             // An edited old copy in the workspace folder stays, like any edited file.
@@ -2402,13 +2514,26 @@ pub fn plan_artifacts_for_surfaces_with(
             managed_hash.as_deref(),
             sources,
         );
-        let mcp = plan_mcp_artifact(
-            &artifact,
-            workspace_root,
-            sources,
-            home,
-            managed_hash.as_deref(),
-        );
+        let mcp = if artifact == ArtifactId::ClaudeSettings {
+            Some(claude_settings_mcp_plan(claude_settings_plan(
+                workspace_root,
+                home,
+                sources.bundle(),
+                &records,
+            )))
+        } else {
+            plan_mcp_artifact(
+                &artifact,
+                workspace_root,
+                sources,
+                home,
+                managed_hash.as_deref(),
+            )
+        };
+        let (rules_rewrite, settings) = match mcp.as_ref().and_then(|plan| plan.settings.clone()) {
+            Some((rewrite, leaves)) => (Some(rewrite), Some(leaves)),
+            None => (None, None),
+        };
         let mut file = None;
         let (kind, previous_state) = match (&rules, &mcp) {
             (Some(assessment), _) => {
@@ -2495,10 +2620,11 @@ pub fn plan_artifacts_for_surfaces_with(
             previous_state,
             rollback_action,
             rules,
-            rules_rewrite: None,
+            rules_rewrite,
             mcp: mcp.and_then(|plan| plan.state),
             file,
             overwrite: None,
+            settings,
         });
     }
 
@@ -2604,6 +2730,7 @@ pub fn plan_artifacts_for_surfaces_with(
             mcp: None,
             file,
             overwrite: None,
+            settings: None,
         });
     }
     keep_stale_units_whole(&mut planned, sources);
@@ -3333,12 +3460,11 @@ pub fn expected_apply_full_digest(
         return digest(rewrite.content.clone());
     }
     let artifact = &planned.artifact;
-    let dest = artifact.resolve_dest(home, workspace_root).ok()?;
+    // Every write of settings.json carries its content (above).
     if artifact == &ArtifactId::ClaudeSettings {
-        return crate::claude_settings::render_install(&dest)
-            .ok()
-            .and_then(digest);
+        return None;
     }
+    let dest = artifact.resolve_dest(home, workspace_root).ok()?;
     let source = artifact.resolve_source(sources)?;
     if source.is_dir() {
         return None;
@@ -3556,7 +3682,11 @@ pub fn artifact_matches_previous_backup_state(
                 workspace_root,
                 home,
             )?;
-            Ok(backup_managed == current_managed)
+            // The managed digest of settings.json is the attribution values only; an override
+            // the write added or removed is compared on its own.
+            Ok(backup_managed == current_managed
+                && !(op.artifact == ArtifactId::ClaudeSettings
+                    && crate::claude_settings::overrides_differ(&dest, &backup_path)))
         }
         RollbackAction::NoAction => Ok(true),
     }
@@ -4110,6 +4240,32 @@ pub fn validate_artifact_after_apply_with(
 ) -> Result<(), String> {
     let (kind, _) = detect_artifact_state_with(artifact, workspace_root, home, sources);
     check_state_after_apply(artifact, kind)
+}
+
+/// Validation of a write that carries its content (Claude's `settings.json`): the file is now
+/// exactly that content. Detecting its state again would judge it by targets that may not want
+/// what the write did (a removal leaves the values "missing").
+pub fn validate_written_content(
+    planned: &PlannedArtifact,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    let rewrite = planned
+        .rules_rewrite
+        .as_ref()
+        .ok_or_else(|| "validation failed: no planned content".to_string())?;
+    let installed = crate::setup_fingerprint::artifact_installed_full_digest(
+        &planned.artifact,
+        workspace_root,
+        home,
+    )?;
+    if installed != crate::stable_digest::bytes(rewrite.content.as_bytes()) {
+        return Err(format!(
+            "validation failed: artifact {:?} differs from the planned content",
+            planned.artifact
+        ));
+    }
+    Ok(())
 }
 
 fn check_state_after_apply(artifact: &ArtifactId, kind: OperationKind) -> Result<(), String> {

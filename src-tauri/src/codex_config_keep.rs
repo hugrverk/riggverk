@@ -597,6 +597,7 @@ pub fn plan_defaults(workspace_root: &Path, home: &Path) -> Result<DefaultsPlan,
         mcp: None,
         file: None,
         overwrite: None,
+        settings: None,
     };
     Ok(DefaultsPlan { keys, operation })
 }

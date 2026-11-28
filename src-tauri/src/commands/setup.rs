@@ -894,22 +894,38 @@ fn apply_mcp_artifact(
     .map_err(|e| format!("write MCP file {}: {e}", dest.display()))
 }
 
-/// Write the two attribution values into Claude's `settings.json`. Every other key keeps its
-/// value and its place. A file the app does not edit (comments, a trailing comma, ...), one that
-/// already says how attribution is shown, or a moved config folder (`CLAUDE_CONFIG_DIR`) is
-/// refused before anything is written. A new file is owner-only (0600).
-fn apply_claude_settings(dest: &Path, root: &Path) -> Result<(), String> {
+/// Write the planned content of Claude's `settings.json`: the attribution values and the
+/// overrides added or removed, every other key with its value and its place. It is written only
+/// over the file it was planned from; a moved config folder (`CLAUDE_CONFIG_DIR`) is refused
+/// before anything is written. A new file is owner-only (0600).
+fn apply_claude_settings(
+    dest: &Path,
+    root: &Path,
+    rewrite: &setup_transaction::RulesRewrite,
+) -> Result<(), String> {
     if crate::claude_settings::config_dir_override() {
         return Err(format!(
             "refusing to change settings.json: {}",
             crate::claude_settings::CONFIG_DIR_REASON
         ));
     }
-    let rendered = crate::claude_settings::render_install(dest)?;
-    if dest.exists() {
-        crate::safe_filesystem::write_regular_file_atomic(dest, rendered.as_bytes(), root)
+    let exists = dest.exists();
+    let installed = if exists {
+        crate::stable_digest::file(dest)?
     } else {
-        crate::safe_filesystem::write_private_regular_file_atomic(dest, rendered.as_bytes(), root)
+        crate::setup_fingerprint::ABSENT_DIGEST.to_string()
+    };
+    if installed != rewrite.expected_installed_digest {
+        return Err("settings.json changed since preview; preview again".to_string());
+    }
+    if exists {
+        crate::safe_filesystem::write_regular_file_atomic(dest, rewrite.content.as_bytes(), root)
+    } else {
+        crate::safe_filesystem::write_private_regular_file_atomic(
+            dest,
+            rewrite.content.as_bytes(),
+            root,
+        )
     }
     .map_err(|e| format!("write settings.json {}: {e}", dest.display()))
 }
@@ -951,14 +967,15 @@ fn apply_single_artifact(
     rules_rewrite: Option<&setup_transaction::RulesRewrite>,
     overwrite: Option<&setup_transaction::Overwrite>,
 ) -> Result<(), String> {
-    // The attribution values of Claude's settings.json are constants of the app: no bundled source.
+    // The values of Claude's settings.json are constants of the app: no bundled source. The plan
+    // carries the content.
     if artifact == &crate::artifact_registry::ArtifactId::ClaudeSettings {
-        if overwrite.is_some() || rules_rewrite.is_some() {
-            return Err("settings.json is never replaced or converted".to_string());
-        }
+        let Some(rewrite) = rules_rewrite.filter(|_| overwrite.is_none()) else {
+            return Err("settings.json is written only from its planned content".to_string());
+        };
         let (dest, root) =
             setup_transaction::validate_artifact_dest(artifact, workspace_root, home)?;
-        return apply_claude_settings(&dest, &root);
+        return apply_claude_settings(&dest, &root, rewrite);
     }
     let (source, dest) = setup_transaction::validate_artifact_source_dest_with(
         artifact,
@@ -1731,6 +1748,8 @@ fn run_planned_artifacts(
                         Err("removed artifact is still present".to_string())
                     }
                 })
+        } else if p.artifact == crate::artifact_registry::ArtifactId::ClaudeSettings {
+            setup_transaction::validate_written_content(p, &ws_root, &home)
         } else {
             setup_transaction::validate_artifact_after_apply_with(
                 &p.artifact,
@@ -2584,20 +2603,17 @@ pub fn get_installation_status(
     surfaces: Vec<String>,
 ) -> Result<crate::installation_status::InstallationStatus, String> {
     let settings = crate::settings::load();
-    let surface_ids = if surfaces.is_empty() {
-        crate::settings::enabled_setup_surfaces(&settings)
-    } else {
-        let parsed: Vec<SetupSurfaceId> = surfaces
-            .iter()
-            .map(|s| {
-                serde_json::from_value::<SetupSurfaceId>(serde_json::Value::String(s.to_string()))
-                    .map_err(|_| format!("Unknown surface ID: {s}"))
-            })
-            .collect::<Result<_, _>>()?;
-        gate_requested_surfaces(canonical_surfaces(parsed), &settings)?
-    };
+    let parsed: Vec<SetupSurfaceId> = surfaces
+        .iter()
+        .map(|s| {
+            serde_json::from_value::<SetupSurfaceId>(serde_json::Value::String(s.to_string()))
+                .map_err(|_| format!("Unknown surface ID: {s}"))
+        })
+        .collect::<Result<_, _>>()?;
     let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
+    let surface_ids =
+        requested_or_retiring_surfaces(canonical_surfaces(parsed), &settings, &ws_root, &home)?;
     crate::installation_status::status_for_surfaces(&surface_ids, &ws_root, &home)
 }
 
@@ -2654,6 +2670,54 @@ fn gate_requested_surfaces(
         .collect())
 }
 
+/// The surfaces of `requested` the target gate drops that the next Update still has to clean up:
+/// every target of the surface is off, its harness is on, and the app's values are still in the
+/// file (see `setup_transaction::claude_settings_retiring`).
+fn retiring_surfaces(
+    requested: &[SetupSurfaceId],
+    settings: &crate::settings::AppSettings,
+    ws_root: &Path,
+    home: &Path,
+) -> Vec<SetupSurfaceId> {
+    let surface = SetupSurfaceId::ClaudeConfig;
+    if requested.contains(&surface)
+        && !crate::settings::surface_enabled(settings, surface)
+        && crate::settings::harness_enabled(settings, crate::agent_targets::HarnessId::Claude)
+        && setup_transaction::claude_settings_retiring(ws_root, home)
+    {
+        vec![surface]
+    } else {
+        Vec::new()
+    }
+}
+
+/// [`gate_requested_surfaces`] plus the surfaces it drops that are retiring; an empty request is
+/// every enabled surface plus the retiring ones.
+fn requested_or_retiring_surfaces(
+    requested: Vec<SetupSurfaceId>,
+    settings: &crate::settings::AppSettings,
+    ws_root: &Path,
+    home: &Path,
+) -> Result<Vec<SetupSurfaceId>, String> {
+    let (mut surfaces, candidates) = if requested.is_empty() {
+        (
+            crate::settings::enabled_setup_surfaces(settings),
+            SetupSurfaceId::ALL.to_vec(),
+        )
+    } else {
+        (
+            gate_requested_surfaces(requested.clone(), settings)?,
+            requested,
+        )
+    };
+    for surface in retiring_surfaces(&candidates, settings, ws_root, home) {
+        if !surfaces.contains(&surface) {
+            surfaces.push(surface);
+        }
+    }
+    Ok(surfaces)
+}
+
 /// Plans exactly `surface_ids`. `plan_setup` treats an empty list as "all
 /// surfaces", so an empty list returns an explicit empty plan instead.
 fn plan_surfaces(
@@ -2676,7 +2740,7 @@ fn plan_surfaces(
     attach_workspace_details(&mut plan, ws_root, home);
     attach_rules_details(&mut plan, home);
     attach_mcp_details(&mut plan, home);
-    attach_claude_settings_details(&mut plan);
+    attach_claude_settings_details(&mut plan, ws_root, home);
     attach_opencode_details(&mut plan, ws_root, home, sources.as_ref().ok());
     attach_file_count_details(&mut plan, ws_root, home, sources.as_ref().ok());
     attach_codex_profile_detail(&mut plan, ws_root, home);
@@ -2759,19 +2823,55 @@ fn attach_mcp_details(plan: &mut SetupPlan, home: &Path) {
     }
 }
 
-/// The review of Claude's attribution setting names the file and what changes in it.
-fn attach_claude_settings_details(plan: &mut SetupPlan) {
-    for op in plan.operations.iter_mut().filter(|op| {
+/// The review of Claude's `settings.json` names the file and what changes in it: the attribution
+/// values, and one line per override added or removed.
+fn attach_claude_settings_details(plan: &mut SetupPlan, workspace_root: &Path, home: &Path) {
+    let writes = |op: &PlannedOperation| {
         matches!(op.surface, SetupSurfaceId::ClaudeConfig)
             && matches!(op.kind, OperationKind::Create | OperationKind::Update)
-    }) {
-        op.details.push(if op.kind == OperationKind::Create {
-            "+ ~/.claude/settings.json (new file; hides commit and PR attribution)".to_string()
-        } else {
-            "~ ~/.claude/settings.json (hides commit and PR attribution; other keys stay)"
-                .to_string()
-        });
+    };
+    if !plan.operations.iter().any(writes) {
+        return;
     }
+    let leaves = setup_transaction::plan_artifacts_for_surfaces(
+        &[SetupSurfaceId::ClaudeConfig],
+        workspace_root,
+        home,
+    )
+    .ok()
+    .and_then(|planned| planned.into_iter().find_map(|p| p.settings))
+    .unwrap_or_default();
+    for op in plan.operations.iter_mut().filter(|op| writes(op)) {
+        op.details = claude_settings_lines(op.kind, &leaves);
+    }
+}
+
+fn claude_settings_lines(
+    kind: OperationKind,
+    leaves: &crate::claude_settings::Leaves,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    match (kind, leaves.attribution) {
+        (OperationKind::Create, true) => lines.push(
+            "+ ~/.claude/settings.json (new file; hides commit and PR attribution)".to_string(),
+        ),
+        (OperationKind::Create, false) => {
+            lines.push("+ ~/.claude/settings.json (new file)".to_string())
+        }
+        (_, true) => lines.push(
+            "~ ~/.claude/settings.json (hides commit and PR attribution; other keys stay)"
+                .to_string(),
+        ),
+        (_, false) => {}
+    }
+    for (paths, note) in [(&leaves.added, "added"), (&leaves.removed, "removed")] {
+        lines.extend(
+            paths
+                .iter()
+                .map(|path| format!("~ settings.json {path} ({note})")),
+        );
+    }
+    lines
 }
 
 /// The review of an update of the OpenCode config names every managed key the merge changes in
@@ -3114,18 +3214,14 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
             .collect(),
     );
     let settings = crate::settings::load();
-    let surface_ids = if requested_surface_ids.is_empty() {
-        crate::settings::enabled_setup_surfaces(&settings)
-    } else {
-        gate_requested_surfaces(requested_surface_ids, &settings)?
-    };
-
     let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
     let home = crate::platform_paths::resolve_user_home(
         &crate::platform_paths::PlatformEnv::from_process_env(),
         crate::platform_paths::Platform::current(),
     )
     .map_err(|e| format!("user home: {e}"))?;
+    let surface_ids =
+        requested_or_retiring_surfaces(requested_surface_ids, &settings, &ws_root, &home)?;
     plan_surfaces(surface_ids, &ws_root, &home)
 }
 
@@ -3166,7 +3262,12 @@ pub fn apply_setup(
         return Err("At least one surface ID is required".to_string());
     }
     let settings = crate::settings::load();
-    let surface_ids = gate_requested_surfaces(surface_ids, &settings)?;
+    let surface_ids = requested_or_retiring_surfaces(
+        surface_ids,
+        &settings,
+        &setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?,
+        &user_home()?,
+    )?;
     if surface_ids.is_empty() {
         // Every reviewed surface was target-disabled after the preview. The fingerprint and token
         // cannot be verified for an empty scope, so no result may claim they were.

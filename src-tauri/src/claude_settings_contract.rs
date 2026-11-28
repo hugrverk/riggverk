@@ -506,14 +506,425 @@ mod tests {
     }
 
     #[test]
-    fn a_target_that_is_off_plans_nothing() {
+    fn a_target_that_is_off_and_owns_nothing_plans_nothing() {
         let env = Env::new("off");
-        let mut settings = crate::settings::load();
-        settings.enabled_target_ids.retain(|id| id != SURFACE);
-        crate::settings::save_with_revision_check(settings, None).unwrap();
+        env.set_target(SURFACE, false);
         env.write_settings(USER_FILE);
         let plan = preview_setup(vec![SURFACE.to_string()]).unwrap();
         assert!(plan.operations.is_empty() && !plan.has_pending_changes);
         assert_eq!(env.read_settings(), USER_FILE);
+        // A user who once had the attribution target on owns no override either.
+        env.set_target(SURFACE, true);
+        env.apply();
+        env.set_target(SURFACE, false);
+        let plan = preview_setup(vec![SURFACE.to_string()]).unwrap();
+        assert!(plan.operations.is_empty() && !plan.has_pending_changes);
+    }
+
+    const OVERRIDES_TARGET: &str = "claude_skill_overrides";
+    /// The skills that start only when asked for, in the order the app writes them.
+    const ON_REQUEST: [&str; 7] = [
+        "grill-me",
+        "raise-the-bar",
+        "retro",
+        "orchestrate",
+        "adversarial-implementation",
+        "adversarial-review",
+        "adversarial-test",
+    ];
+
+    impl Env {
+        fn set_target(&self, id: &str, on: bool) {
+            let mut settings = crate::settings::load();
+            settings.enabled_target_ids.retain(|enabled| enabled != id);
+            if on {
+                settings.enabled_target_ids.push(id.to_string());
+            }
+            settings.enabled_target_ids =
+                crate::agent_targets::normalize_enabled_ids(&settings.enabled_target_ids);
+            crate::settings::save_with_revision_check(settings, None).expect("settings");
+        }
+
+        /// The record of settings.json as the state file holds it, read as plain JSON.
+        fn raw_record(&self) -> Option<Value> {
+            let identity = artifact_identity(&ArtifactId::ClaudeSettings);
+            let raw =
+                fs::read_to_string(crate::managed_state::managed_state_path(&self.ws)).ok()?;
+            let state: Value = serde_json::from_str(&raw).ok()?;
+            state["artifacts"]
+                .as_array()?
+                .iter()
+                .find(|record| record["identity"] == identity.as_str())
+                .cloned()
+        }
+
+        fn owned_paths(&self) -> Vec<String> {
+            self.raw_record()
+                .and_then(|record| record["owned_values"].as_object().cloned())
+                .map(|owned| owned.keys().cloned().collect())
+                .unwrap_or_default()
+        }
+
+        fn status_detail(&self) -> String {
+            crate::installation_status::status_for_surfaces(
+                &[SetupSurfaceId::ClaudeConfig],
+                &self.ws,
+                &self.home,
+            )
+            .expect("status")
+            .surfaces[0]
+                .detail
+                .clone()
+        }
+    }
+
+    fn overrides_of(text: &str) -> Map<String, Value> {
+        parse(text)
+            .get("skillOverrides")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn all_overrides() -> Value {
+        Value::Object(
+            ON_REQUEST
+                .iter()
+                .map(|name| (name.to_string(), Value::String("name-only".into())))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn the_overrides_are_added_beside_the_users_keys_and_the_attribution_keys() {
+        let env = Env::new("overrides-add");
+        env.set_target(OVERRIDES_TARGET, true);
+        env.write_settings(USER_FILE);
+        let review = env.plan_text();
+        assert!(
+            review.contains(
+                "~ ~/.claude/settings.json (hides commit and PR attribution; other keys stay)"
+            ),
+            "{review}"
+        );
+        for name in ON_REQUEST {
+            let line = format!("~ settings.json skillOverrides.{name} (added)");
+            assert!(review.contains(&line), "{line}: {review}");
+        }
+        env.apply();
+
+        let installed = parse(&env.read_settings());
+        assert_eq!(
+            keys(&installed),
+            [
+                "env",
+                "permissions",
+                "hooks",
+                "model",
+                "attribution",
+                "skillOverrides"
+            ]
+        );
+        for (key, value) in &parse(USER_FILE) {
+            assert_eq!(installed.get(key), Some(value), "{key} kept");
+        }
+        assert_eq!(installed.get("attribution"), Some(&hidden()));
+        assert_eq!(installed.get("skillOverrides"), Some(&all_overrides()));
+        // The record holds a digest per leaf the app wrote, and the object it created; never a value.
+        let mut expected: Vec<String> = ON_REQUEST
+            .iter()
+            .map(|name| format!("skillOverrides.{name}"))
+            .collect();
+        expected.push("skillOverrides".into());
+        expected.sort();
+        assert_eq!(env.owned_paths(), expected);
+        let state = fs::read_to_string(crate::managed_state::managed_state_path(&env.ws)).unwrap();
+        assert!(!state.contains("name-only"), "{state}");
+        assert_eq!(env.record(), Some(env.source_digest()), "attribution owned");
+        assert_eq!(env.planned().kind, OperationKind::NoChange);
+    }
+
+    #[test]
+    fn the_overrides_alone_are_added_while_the_attribution_target_is_off() {
+        let env = Env::new("overrides-alone");
+        env.set_target(SURFACE, false);
+        env.set_target(OVERRIDES_TARGET, true);
+        env.write_settings(USER_FILE);
+        let review = env.plan_text();
+        assert!(!review.contains("attribution"), "{review}");
+        let result = env.apply();
+        let installed = parse(&env.read_settings());
+        assert_eq!(
+            installed.get("attribution"),
+            None,
+            "attribution is not written"
+        );
+        assert_eq!(installed.get("skillOverrides"), Some(&all_overrides()));
+        assert_ne!(
+            env.record(),
+            Some(env.source_digest()),
+            "attribution not owned"
+        );
+        assert_eq!(env.planned().kind, OperationKind::NoChange);
+
+        // Undo of the add removes the leaves and the object the apply created.
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "rollback: {}", rolled.message);
+        assert_eq!(env.read_settings(), USER_FILE);
+    }
+
+    #[test]
+    fn hidden_attribution_of_the_users_is_never_adopted_through_an_override_write() {
+        let env = Env::new("overrides-not-adopted");
+        env.set_target(SURFACE, false);
+        env.set_target(OVERRIDES_TARGET, true);
+        let text = "{\"attribution\":{\"commit\":\"\",\"pr\":\"\"},\"model\":\"x\"}\n";
+        env.write_settings(text);
+        env.apply();
+        assert_ne!(env.record(), Some(env.source_digest()));
+        // Turning the attribution target on later finds the user's own values.
+        env.set_target(SURFACE, true);
+        assert_eq!(env.planned().kind, OperationKind::Manual);
+        env.apply_rules();
+        assert_ne!(env.record(), Some(env.source_digest()));
+    }
+
+    #[test]
+    fn a_value_the_user_set_for_one_of_the_seven_is_never_written_recorded_or_removed() {
+        let env = Env::new("overrides-users");
+        env.set_target(SURFACE, false);
+        env.set_target(OVERRIDES_TARGET, true);
+        let text = "{\n  \"skillOverrides\": {\n    \"retro\": \"off\",\n    \"grill-me\": \"name-only\",\n    \"my-skill\": \"off\"\n  }\n}\n";
+        env.write_settings(text);
+        let review = env.plan_text();
+        assert!(!review.contains("skillOverrides.retro"), "{review}");
+        assert!(!review.contains("skillOverrides.grill-me"), "{review}");
+        env.apply();
+        let overrides = overrides_of(&env.read_settings());
+        assert_eq!(overrides.get("retro"), Some(&Value::String("off".into())));
+        assert_eq!(
+            overrides.get("my-skill"),
+            Some(&Value::String("off".into()))
+        );
+        assert_eq!(overrides.len(), 8);
+        let owned = env.owned_paths();
+        assert_eq!(owned.len(), 5, "{owned:?}");
+        for path in [
+            "skillOverrides",
+            "skillOverrides.retro",
+            "skillOverrides.grill-me",
+        ] {
+            assert!(!owned.contains(&path.to_string()), "{path}: {owned:?}");
+        }
+
+        // Off: only the five the app wrote go; the user's three and the object stay.
+        env.set_target(OVERRIDES_TARGET, false);
+        let review = env.plan_text();
+        assert!(
+            !review.contains("skillOverrides.retro")
+                && !review.contains("skillOverrides.grill-me")
+                && review.contains("~ settings.json skillOverrides.raise-the-bar (removed)"),
+            "{review}"
+        );
+        env.apply();
+        assert_eq!(parse(&env.read_settings()), parse(text));
+        assert!(env.owned_paths().is_empty());
+        assert_eq!(env.planned().kind, OperationKind::NoChange);
+    }
+
+    #[test]
+    fn turning_the_target_off_removes_only_the_apps_leaves_with_attribution_on() {
+        let env = Env::new("overrides-off-attribution-on");
+        env.set_target(OVERRIDES_TARGET, true);
+        env.write_settings(USER_FILE);
+        env.apply();
+        // The user adds a key of their own to the object the app created.
+        let mut config = parse(&env.read_settings());
+        if let Some(Value::Object(overrides)) = config.get_mut("skillOverrides") {
+            overrides.insert("mine".into(), Value::String("off".into()));
+            // and changes one of the app's values: it is theirs from then on.
+            overrides.insert("retro".into(), Value::String("off".into()));
+        }
+        env.write_settings(&serde_json::to_string_pretty(&Value::Object(config)).unwrap());
+
+        env.set_target(OVERRIDES_TARGET, false);
+        assert_eq!(env.planned().kind, OperationKind::Update);
+        let review = env.plan_text();
+        for name in ON_REQUEST.iter().filter(|name| **name != "retro") {
+            let line = format!("~ settings.json skillOverrides.{name} (removed)");
+            assert!(review.contains(&line), "{line}: {review}");
+        }
+        assert!(!review.contains("skillOverrides.retro"), "{review}");
+        assert!(!review.contains("hides commit"), "{review}");
+        let result = env.apply();
+        let after = parse(&env.read_settings());
+        assert_eq!(after.get("attribution"), Some(&hidden()));
+        assert_eq!(
+            after.get("skillOverrides"),
+            Some(&serde_json::json!({"retro": "off", "mine": "off"}))
+        );
+        assert_eq!(
+            env.record(),
+            Some(env.source_digest()),
+            "attribution still owned"
+        );
+        assert_eq!(env.planned().kind, OperationKind::NoChange);
+
+        // Undo of the strip puts the app's leaves back, whatever else changed since.
+        let mut config = parse(&env.read_settings());
+        config.insert("theme".into(), Value::String("dark".into()));
+        env.write_settings(&serde_json::to_string_pretty(&Value::Object(config)).unwrap());
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "rollback: {}", rolled.message);
+        let restored = parse(&env.read_settings());
+        assert_eq!(restored.get("theme"), Some(&Value::String("dark".into())));
+        let overrides = overrides_of(&env.read_settings());
+        assert_eq!(overrides.len(), 8, "{overrides:?}");
+        assert_eq!(overrides.get("retro"), Some(&Value::String("off".into())));
+        assert_eq!(
+            overrides.get("grill-me"),
+            Some(&Value::String("name-only".into()))
+        );
+    }
+
+    #[test]
+    fn turning_the_target_off_removes_the_apps_leaves_with_attribution_off_too() {
+        let env = Env::new("overrides-off-retiring");
+        env.set_target(SURFACE, false);
+        env.set_target(OVERRIDES_TARGET, true);
+        env.write_settings(USER_FILE);
+        env.apply();
+        env.set_target(OVERRIDES_TARGET, false);
+
+        // Both targets are off, the record still owns values: the surface is still planned.
+        assert_eq!(
+            env.status_detail(),
+            "off · Riggverk's values are removed at the next update"
+        );
+        let plan = preview_setup(vec![SURFACE.to_string()]).expect("preview");
+        assert!(plan.has_pending_changes, "{}", env.plan_text());
+        let review = env.plan_text();
+        assert!(
+            review.contains("~ settings.json skillOverrides.retro (removed)"),
+            "{review}"
+        );
+        let result = env.apply();
+        assert_eq!(
+            env.read_settings(),
+            USER_FILE,
+            "the created object goes too"
+        );
+
+        // Nothing owned any more: the surface is off again.
+        let plan = preview_setup(vec![SURFACE.to_string()]).expect("preview");
+        assert!(plan.operations.is_empty() && !plan.has_pending_changes);
+
+        // Undo of the strip brings the leaves back.
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "rollback: {}", rolled.message);
+        assert_eq!(
+            parse(&env.read_settings()).get("skillOverrides"),
+            Some(&all_overrides())
+        );
+    }
+
+    #[test]
+    fn turning_the_claude_harness_off_removes_nothing() {
+        let env = Env::new("overrides-harness-off");
+        env.set_target(OVERRIDES_TARGET, true);
+        env.write_settings(USER_FILE);
+        env.apply();
+        let installed = env.read_settings();
+        let mut settings = crate::settings::load();
+        settings
+            .enabled_harness_ids
+            .retain(|id| *id != crate::agent_targets::HarnessId::Claude);
+        crate::settings::save_with_revision_check(settings, None).expect("settings");
+        let plan = preview_setup(Vec::new()).expect("preview");
+        assert!(plan
+            .operations
+            .iter()
+            .all(|op| op.surface != SetupSurfaceId::ClaudeConfig));
+        assert_eq!(env.read_settings(), installed);
+    }
+
+    #[test]
+    fn a_file_the_app_created_stays_when_a_strip_empties_it() {
+        let env = Env::new("overrides-created-file");
+        env.set_target(SURFACE, false);
+        env.set_target(OVERRIDES_TARGET, true);
+        assert_eq!(env.planned().kind, OperationKind::Create);
+        env.apply();
+        assert_eq!(overrides_of(&env.read_settings()).len(), 7);
+        env.set_target(OVERRIDES_TARGET, false);
+        env.apply();
+        assert_eq!(env.read_settings(), "{}\n");
+    }
+
+    #[test]
+    fn a_record_without_owned_values_owns_attribution_and_no_override() {
+        let env = Env::new("overrides-old-record");
+        env.write_settings(USER_FILE);
+        env.apply();
+        // The user writes one of the seven values by hand; the record is as an older version
+        // wrote it.
+        let mut config = parse(&env.read_settings());
+        config.insert(
+            "skillOverrides".into(),
+            serde_json::json!({"retro": "name-only"}),
+        );
+        env.write_settings(&serde_json::to_string_pretty(&Value::Object(config)).unwrap());
+        assert!(env
+            .raw_record()
+            .expect("record")
+            .get("owned_values")
+            .is_none());
+        assert_eq!(env.planned().kind, OperationKind::NoChange);
+        env.set_target(OVERRIDES_TARGET, true);
+        env.apply();
+        assert!(!env
+            .owned_paths()
+            .contains(&"skillOverrides.retro".to_string()));
+        env.set_target(OVERRIDES_TARGET, false);
+        env.apply();
+        assert_eq!(
+            overrides_of(&env.read_settings()),
+            *serde_json::json!({"retro": "name-only"})
+                .as_object()
+                .unwrap()
+        );
+        assert_eq!(env.record(), Some(env.source_digest()));
+    }
+
+    #[test]
+    fn a_skill_overrides_value_that_is_not_an_object_is_a_conflict() {
+        let env = Env::new("overrides-type");
+        env.apply_rules();
+        let text = "{\"skillOverrides\": \"SECRET-MARKER\"}\n";
+        env.write_settings(text);
+        // Without the target the key is none of the app's business.
+        assert_eq!(env.planned().kind, OperationKind::Update);
+        env.set_target(OVERRIDES_TARGET, true);
+        assert_eq!(env.planned().kind, OperationKind::Conflict);
+        let review = env.plan_text();
+        assert!(
+            review.contains(
+                "settings.json: skillOverrides has an unexpected type; the app writes nothing"
+            ),
+            "{review}"
+        );
+        assert!(!review.contains("SECRET-MARKER"), "{review}");
+        let shown = serde_json::to_string(
+            &crate::installation_status::status_for_surfaces(
+                &[SetupSurfaceId::ClaudeConfig],
+                &env.ws,
+                &env.home,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(!shown.contains("SECRET-MARKER"), "{shown}");
+        env.assert_nothing_to_apply();
+        assert_eq!(env.read_settings(), text);
     }
 }

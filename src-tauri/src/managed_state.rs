@@ -340,6 +340,14 @@ pub fn next_state_from_operations<R: SourceRoot + ?Sized>(
             },
         );
     }
+    record_claude_settings_values(
+        &mut records,
+        previous,
+        operations,
+        selected,
+        runtime_root,
+        home,
+    );
     refresh_records_matching_source(&mut records, bundled_root, runtime_root, home);
     record_opencode_role_models(&mut records, bundled_root, runtime_root, home);
     let mut artifacts: Vec<_> = records.into_values().collect();
@@ -372,6 +380,11 @@ fn refresh_records_matching_source<R: SourceRoot + ?Sized>(
         else {
             continue;
         };
+        // Attribution values equal to the app's are the user's own unless the app wrote them:
+        // only an apply that writes them makes them the app's (see `record_claude_settings_values`).
+        if artifact == ArtifactId::ClaudeSettings {
+            continue;
+        }
         let Ok(installed) =
             setup_fingerprint::artifact_installed_managed_digest(&artifact, runtime_root, home)
         else {
@@ -391,6 +404,67 @@ fn refresh_records_matching_source<R: SourceRoot + ?Sized>(
             record.hash = installed;
         }
     }
+}
+
+/// The record of `settings.json` after an apply that wrote it. The `hash` keeps saying whether the
+/// app owns the attribution values: an apply that did not write them leaves what the previous
+/// record said (`ABSENT_DIGEST` without one), so a user's own `""` is never adopted. The owned
+/// leaves are the previous ones with the apply's additions and removals, less any the file no
+/// longer holds as the app wrote them. A record no override was ever written for keeps `None`.
+fn record_claude_settings_values(
+    records: &mut HashMap<String, ManagedArtifactRecord>,
+    previous: Option<&ManagedState>,
+    operations: &[crate::setup_transaction::ArtifactManifestOperation],
+    selected: &[crate::setup_transaction::PlannedArtifact],
+    runtime_root: &Path,
+    home: &Path,
+) {
+    use crate::setup_lifecycle::OperationKind;
+    let artifact = ArtifactId::ClaudeSettings;
+    let wrote = operations.iter().any(|operation| {
+        operation.artifact == artifact
+            && matches!(
+                operation.kind,
+                OperationKind::Create | OperationKind::Update
+            )
+    });
+    let identity = artifact_identity(&artifact);
+    let (true, Some(record)) = (wrote, records.get_mut(&identity)) else {
+        return;
+    };
+    let Some(leaves) = selected
+        .iter()
+        .find(|planned| planned.artifact == artifact)
+        .and_then(|planned| planned.settings.as_ref())
+    else {
+        return;
+    };
+    let before = previous
+        .into_iter()
+        .flat_map(|state| state.artifacts.iter())
+        .find(|record| record.identity == identity);
+    if !leaves.attribution {
+        record.hash = before.map_or_else(
+            || setup_fingerprint::ABSENT_DIGEST.to_string(),
+            |before| before.hash.clone(),
+        );
+    }
+    let owned_before = before.and_then(|before| before.owned_values.as_ref());
+    let touched = !leaves.added.is_empty()
+        || !leaves.removed.is_empty()
+        || leaves.created_object
+        || leaves.dropped_object;
+    record.owned_values = if touched || owned_before.is_some() {
+        let owned = crate::claude_settings::owned_after(owned_before, leaves);
+        let installed = artifact
+            .resolve_dest(home, runtime_root)
+            .ok()
+            .and_then(|dest| crate::claude_settings::read(&dest).ok().flatten())
+            .unwrap_or_default();
+        Some(crate::claude_settings::still_owned(&installed, &owned))
+    } else {
+        None
+    };
 }
 
 /// While the installed `opencode.json` is what an install makes of it, the role models it holds

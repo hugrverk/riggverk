@@ -386,6 +386,7 @@ fn a_flagged_pack_skill_gets_its_own_review_line_naming_its_keys() {
         mcp: None,
         file: None,
         overwrite: None,
+        settings: None,
     };
     let planned = [
         file("tdd", "SKILL.md", OperationKind::Create),
