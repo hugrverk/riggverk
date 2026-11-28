@@ -85,6 +85,6 @@ Never claim done without evidence. Verify with the lightest check that can falsi
 Read-only git commands are allowed. Do not perform state-changing git operations unless requested or the task explicitly includes them. Show the exact git command before risky state changes. Never force push, hard reset, destructive clean, or destructive stash without explicit confirmation. One logical change per commit. Commit format: English imperative, max 72 chars, `<type>(<scope>): <subject>`, types `feat|fix|refactor|chore|docs`.
 
 ## Final report
-End every implementation reply with a report under these headings. Small change (one file, one step): Changed, Verified. Larger work: Changed, Verified, Not verified, Risk, Next.
+End every implementation reply with a report under these headings. Small change (one file, one step): Changed, Verified. Larger work, and any change to two or more files: Changed, Verified, Not verified, Risk, Next.
 Audit-only: Finding, Severity, Evidence, Recommendation, Confidence.
 A skill's `## Output` lists content to cover, not a replacement format: keep these headings and fold the skill's items into them.
