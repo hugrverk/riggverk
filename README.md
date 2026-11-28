@@ -1,6 +1,11 @@
 # Riggverk
 
-Riggverk is a local agent environment manager: a Tauri control panel that installs and maintains one shared set of rules, skills, agents, and MCP entries across Codex, OpenCode, Claude Code, and Cursor, plus a lighter opt-in tier (rules, Playwright MCP entry, skills) for GitHub Copilot CLI, Pi, Kilo Code, Google Antigravity, and Grok Build (which reads Claude Code's rules file instead of its own). Support comes in two tiers: Codex, OpenCode, Google Antigravity and Claude Code are primary, the agents Riggverk checks and fixes first; Cursor, GitHub Copilot CLI, Pi, Kilo Code and Grok Build are best effort, which means they are supported but new versions of them are checked later. The tier is a label: it changes neither which agents are on by default nor what the app writes. A desktop UI you can use with the mouse, with a keyboard shortcut for every action: a sidebar of agents, cards that say what is up to date, what can be updated and what needs your decision, and a history of every update. Every write is previewed before it happens.
+Riggverk gives every coding agent on your machine the same rules and the same skills. It is a desktop app for macOS and Linux that installs one shared set of rules, skills, agents and MCP entries into Claude Code, Codex, Google Antigravity and OpenCode, and into the other agents it supports, and keeps it up to date. Every write is previewed before it happens.
+
+- **One setup for every agent.** Codex, OpenCode, Claude Code and Cursor get rules, skills, agents and MCP entries. GitHub Copilot CLI, Pi, Kilo Code, Google Antigravity and Grok Build get a lighter set you turn on yourself: rules, a Playwright MCP entry and skills (Grok Build reads Claude Code's rules file instead of its own).
+- **Two support tiers.** Claude Code, Codex, Google Antigravity and OpenCode are primary, the agents Riggverk checks and fixes first. Cursor, GitHub Copilot CLI, Pi, Kilo Code and Grok Build are best effort, which means they are supported but new versions of them are checked later. The tier is a label: it changes neither which agents are on by default nor what the app writes.
+- **You decide what is written.** Cards say what is up to date, what can be updated and what needs your decision, and the History lists every update.
+- **Mouse or keyboard.** A desktop UI with a sidebar of agents and a keyboard shortcut for every action.
 
 ![Riggverk's Overview: the base, your refinements and packs flowing into each agent, with what is up to date and what is ready to update](docs/images/overview.png)
 
