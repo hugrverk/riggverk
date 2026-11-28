@@ -276,7 +276,7 @@ function answerStyleGroup(input: LibraryModelInput): LibraryGroup | null {
 /** The decision style's levels, in the order shown, each said in one line. */
 export const DECISION_STYLE_LEVELS: readonly { level: DecisionStyleLevel; name: string; desc: string }[] = [
   { level: "harness_default", name: "Harness default", desc: "Adds nothing: each agent asks the way it does by default." },
-  { level: "as_questions", name: "As questions", desc: "Decisions that are yours come as questions with a recommended answer first, through the agent's question tool when it has one." },
+  { level: "as_questions", name: "As questions", desc: "Your decisions come as questions, recommended answer first, in the agent's question tool when it has one." },
 ];
 
 /** The "Decisions" group: one row per level, the one in use marked, the others offering Use. */

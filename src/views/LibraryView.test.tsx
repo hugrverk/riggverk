@@ -1362,7 +1362,7 @@ describe("Library decisions", () => {
     expect(within(decisionRow("Harness default")).getByText("In use")).toBeTruthy();
     expect(within(decisionRow("Harness default")).getByText("Adds nothing: each agent asks the way it does by default.")).toBeTruthy();
     expect(within(decisionRow("Harness default")).queryByRole("button", { name: "Use" })).toBeNull();
-    expect(within(decisionRow("As questions")).getByText("Decisions that are yours come as questions with a recommended answer first, through the agent's question tool when it has one.")).toBeTruthy();
+    expect(within(decisionRow("As questions")).getByText("Your decisions come as questions, recommended answer first, in the agent's question tool when it has one.")).toBeTruthy();
     expect(within(decisionRow("As questions")).getByRole("button", { name: "Use" })).toBeTruthy();
   });
 
