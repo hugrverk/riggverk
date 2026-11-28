@@ -26,12 +26,24 @@ Run only on an explicit request, such as `/grill-me`, `$grill-me`, "grill me on 
 1. At the start, remind the user once that they own the scope and can push back, say "don't know", or stop at any time.
 2. Map the idea as a tree of decisions and their dependencies. Find facts in available code, files, documentation, or other environment evidence instead of asking the user for facts you can look up. Use a subagent for fact-finding if available and permitted. An unresolved fact is a prerequisite: investigate it while asking independent decisions where possible.
 3. In each round ask the whole current frontier: all decisions whose prerequisites are settled. Never ask a question that depends on another unanswered question, including one in the same round. Ask for decisions rather than facts. Prefer open questions over pre-baked choices.
-4. Present each question in plain text with a number, a short title, the question, and your recommended answer on its own line. The user can answer by number. If the user's rules ask for the harness's question tool, use it and put the recommendation first among its options.
+4. Ask each round through the harness's question tool when it has one (see Harness notes): one question per decision, with a short header, two to four answers with your recommended answer first and marked as recommended, and one line per answer on what it leads to. Write each question so it can be read on its own. The tool adds a free-text answer itself, so add no "Other" option. Split a round that holds more questions than one call takes across calls, in dependency order. Without such a tool, present each question in plain text with a number, a short title, the question, and your recommended answer on its own line; the user can answer by number.
 5. Wait for answers, update the tree, and repeat without a numeric round limit. If a decision about look, feel, or layout needs something concrete to react to, identify it as needing a prototype and suggest `prototype`; resume the interview after there is something to assess. Continue independent questions where possible.
 6. When the user says they are done (for example, "wrap up"), or the tree is settled, post a short decision summary in chat: decided items, one line each; still open; and items needing a prototype. Optionally suggest a next step such as `implementation-plan`. Do not write a file.
 
 ## Harness notes
 
+### Claude Code
+
+- Question tool: `AskUserQuestion`, up to four questions per call with two to four answers each.
+
+### Codex
+
+- Question tool: `request_user_input`, up to three questions per call with two or three answers each. Codex offers it in Plan mode and waits for the answer. Outside Plan mode use `request_user_input_async` when it is offered, then end the turn and wait for the reply; otherwise use the plain-text format. Checked on Codex 0.171.0 that both tools are offered; not tried in a session.
+
+### OpenCode
+
+- Question tool: `question`, in the agents that have it. Riggverk's `architect` and OpenCode's `plan` do; `build` does not (OpenCode 1.19.6).
+
 ### Light harnesses
 
-If automatic invocation controls are unavailable, enforce the explicit-request rule in the Invocation section. Use the plain-text round format unless the user's rules require the harness's question tool.
+If automatic invocation controls are unavailable, enforce the explicit-request rule in the Invocation section. Use the harness's question tool when it has one, and the plain-text round format otherwise.
