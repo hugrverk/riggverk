@@ -104,7 +104,7 @@ Every harness file is installed from the packaged bundle, and the Library and he
 
 ## Skills
 
-The bundled catalog is listed in [SKILLS.md](resources/default-workspace/docs/SKILLS.md). `retro` is user-invoked only, and the adversarial skills run only when you ask for them (they are not in the routing rules).
+The bundled catalog is listed in [SKILLS.md](resources/default-workspace/docs/SKILLS.md). `retro`, `grill-me`, `raise-the-bar`, `orchestrate` and the adversarial skills run only when you ask for them, by slash command or in plain words (they are not in the routing rules).
 
 ```text
 skills/<skill>/SKILL.md
