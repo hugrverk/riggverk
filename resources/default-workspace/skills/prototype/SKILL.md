@@ -1,6 +1,6 @@
 ---
 name: prototype
-description: Builds throwaway variants to answer one decision question (UI layout, interaction, state machine, data model) outside production paths. Use when an approach is uncertain and cheap experiments can decide it; for UI, with frontend-design. Not for choosing by analysis alone (implementation-plan).
+description: Builds throwaway variants to answer one decision question about UI, interaction or data. Use when an approach is uncertain and a cheap experiment can decide it.
 license: MIT
 metadata:
   category: workflow

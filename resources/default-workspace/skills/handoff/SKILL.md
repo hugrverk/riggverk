@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Turns a session or an executor or subagent report into a compact, redacted handoff with verified versus claimed state, changed files, risks, and the safest next action. Use when pausing work, transferring context, or nearing the context limit. Not for a status report (status-report).
+description: Turns a session or subagent report into a compact, redacted handoff. Use when pausing work, transferring context or nearing the context limit.
 license: MIT
 metadata:
   category: workflow

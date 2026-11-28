@@ -1,6 +1,6 @@
 ---
 name: agents-md
-description: Creates or refreshes AGENTS.md (and an optional CLAUDE.md pointer) from verified commands, layout and invariants. Use when onboarding agents to a repo, when AGENTS.md is missing or stale, or after build or test commands change. Not for global rules.
+description: Creates or refreshes a repo's AGENTS.md from verified commands and layout. Use when onboarding agents to a repo or AGENTS.md is missing or stale.
 license: MIT
 metadata:
   category: docs

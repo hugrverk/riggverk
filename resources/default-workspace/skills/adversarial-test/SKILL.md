@@ -1,6 +1,6 @@
 ---
 name: adversarial-test
-description: Uses a fresh adversary to propose failing tests, then fixes production code against qualified frozen tests. Use when explicitly asked for adversarial tests, never unasked.
+description: Has a fresh adversary propose failing tests, then fixes production code against them frozen. Use when explicitly asked for adversarial tests, never unasked.
 license: MIT
 compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial.
 metadata:

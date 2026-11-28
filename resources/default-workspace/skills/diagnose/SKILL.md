@@ -1,6 +1,6 @@
 ---
 name: diagnose
-description: Finds root cause for bugs, failures, flakes, slowness, or regressions with a red-capable feedback loop, then reproduce → minimise → hypothesise → instrument → fix. Use when the cause is unknown, before editing code. Not for test-first work on specified behavior (tdd).
+description: Finds root cause for bugs, failures, flakes, slowness or regressions. Use when the cause is unknown, before editing code. Not for test-first work (tdd).
 license: MIT
 metadata:
   category: diagnosis

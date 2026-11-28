@@ -1,6 +1,6 @@
 ---
 name: browser-qa
-description: Verifies frontend changes in a browser with route smoke, interactions, two viewports, console and network checks, and dev-server lifecycle. Use when a user-facing UI change needs proof that it works. Not for critiquing supplied screenshots (screenshot-review).
+description: Verifies frontend changes in a live browser. Use when a UI change needs proof that it works. Not for critiquing supplied screenshots (screenshot-review).
 license: MIT
 compatibility: Needs browser automation, such as the Playwright MCP server Riggverk installs or the Playwright CLI route in playwright-cli.md (needs Node.js and npm).
 metadata:

@@ -1,6 +1,6 @@
 ---
 name: security-audit
-description: Runs Cloudflare's six-phase security audit of a whole codebase with independent verification and validated findings. Use when someone explicitly asks to audit or pen-test a codebase or for an audit report. Not for a change or a focused question (security-review); source-only, no live testing.
+description: Runs Cloudflare's six-phase security audit of a whole codebase. Use when explicitly asked to audit or pen-test a codebase. Not for one change (security-review).
 license: MIT
 compatibility: Full audit mode needs subagents, and Node.js for the bundled validators.
 metadata:

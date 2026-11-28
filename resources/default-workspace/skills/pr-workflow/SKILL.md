@@ -1,6 +1,6 @@
 ---
 name: pr-workflow
-description: Turns the user's finished work into clean commits and a PR split by logical change, in the repo's conventions, opens or updates it with gh, and on request watches it through CI. Use when the user asks to commit, push, open, update or watch a PR. Not for review replies or old PRs (pr-modernize).
+description: Turns finished work into clean commits and a PR, and on request watches it through CI. Use when asked to commit, push, open, update or watch a PR.
 license: MIT
 compatibility: Needs git. Opening, updating or watching a PR needs an authenticated gh CLI; without it the skill prints the title and body for the user to paste, and cannot watch.
 allowed-tools: Bash(git branch --show-current) Bash(git remote -v) Bash(git config --get commit.template)

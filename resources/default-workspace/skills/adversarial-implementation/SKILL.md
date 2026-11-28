@@ -1,6 +1,6 @@
 ---
 name: adversarial-implementation
-description: Runs a delegated implementer against a fresh read-only critic and proves findings, then runs a deletion-only round. Use when explicitly asked for adversarial implementation, never unasked.
+description: Runs a delegated implementer against a fresh read-only critic, then a deletion-only round. Use when explicitly asked for adversarial implementation, never unasked.
 license: MIT
 compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial.
 metadata:

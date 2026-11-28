@@ -1,6 +1,6 @@
 ---
 name: security-review
-description: Reviews a change's security risks in auth, input, injection, secrets, uploads, SSRF, CSRF/XSS, webhooks, dependencies, and agent shell or file access. Use when a change touches auth, input, endpoints, payments, uploads, shell or sensitive data. Not for whole-codebase audits (security-audit).
+description: Reviews a change for security risks. Use when it touches auth, input, endpoints, payments, uploads, secrets, shell or sensitive data.
 license: MIT
 metadata:
   category: security

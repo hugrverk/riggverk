@@ -1,6 +1,6 @@
 ---
 name: implementation-plan
-description: Breaks multi-step or cross-file work into verifiable slices with exact files, steps, commands and risks, without editing code. Use when changes span several files or layers, migrations, or scope needs slicing. Not for writing the code (minimal-implementation).
+description: Breaks multi-step or cross-file work into verifiable slices. Use when changes span several files or scope needs slicing. Not for writing the code (minimal-implementation).
 license: MIT
 metadata:
   category: planning

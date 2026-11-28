@@ -1,6 +1,6 @@
 ---
 name: review-response
-description: Replies to and resolves PR review comments, verifying each claim against the code, then fixing, pushing back with evidence or asking, with one drafted reply per thread. Use when a PR has review comments or the user pastes reviewer feedback. Not for writing code comments or reviewing a diff yourself.
+description: Replies to PR review comments after verifying each claim against the code. Use when a PR has review comments or the user pastes reviewer feedback.
 license: MIT
 compatibility: Uses an authenticated gh CLI, with jq when installed, to read review threads and to post replies the user approved; without it, works from a pasted review.
 allowed-tools: Bash(gh pr diff *)

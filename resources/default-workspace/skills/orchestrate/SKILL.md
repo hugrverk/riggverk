@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Leads agents toward a goal with a charter, a ledger that survives context loss, risk-routed lanes and lead-verified reports. Use when the user asks to orchestrate, never unasked.
+description: Leads agents toward a goal with a charter, a ledger and verified lanes. Use when the user asks to orchestrate, never unasked.
 license: MIT
 compatibility: Needs git and either write-capable subagents in the current harness or another coding-agent CLI with a headless mode (Codex, Claude Code, OpenCode).
 metadata:

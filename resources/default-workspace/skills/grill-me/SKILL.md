@@ -1,6 +1,6 @@
 ---
 name: grill-me
-description: Interview the user to sharpen an idea, plan, or design. Use when explicitly asked to grill them; never start on your own. Not for writing an implementation plan or building a prototype.
+description: Interview the user to sharpen an idea, plan, or design. Use when explicitly asked to grill them; never start on your own. Not for planning (implementation-plan).
 license: MIT
 metadata:
   category: workflow

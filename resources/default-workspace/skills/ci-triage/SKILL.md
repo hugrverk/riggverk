@@ -1,6 +1,6 @@
 ---
 name: ci-triage
-description: Classifies a red CI run from its failed job logs (code, flaky test, environment, infra), reproduces it locally with the repo's command, then hands root cause to diagnose. Use when CI fails on a branch or PR. Not for failures seen only locally (diagnose).
+description: Classifies a red CI run from its failed job logs and reproduces it locally. Use when CI or PR checks fail. Not for failures seen only locally (diagnose).
 license: MIT
 compatibility: Uses an authenticated gh CLI for GitHub Actions runs and logs; without it, works from a log the user pastes.
 allowed-tools: Bash(gh auth status) Bash(git rev-parse *)

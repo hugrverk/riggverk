@@ -1,6 +1,6 @@
 ---
 name: adversarial-review
-description: Runs a fresh read-only critic against a diff or plan and reports proven findings without fixes. Use when explicitly asked for adversarial review, never unasked.
+description: Runs a fresh read-only critic on a diff or plan and reports proven findings without fixes. Use when explicitly asked for adversarial review, never unasked.
 license: MIT
 compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial.
 metadata:

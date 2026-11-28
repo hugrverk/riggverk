@@ -1,6 +1,6 @@
 ---
 name: context-budget
-description: Audits agent instructions (rules, skills, prompts, tool config) for token cost, duplication and contradictions, and proposes cuts. Use when adding skills or rules, or when instructions feel bloated, repetitive, or conflicting.
+description: Audits agent rules, skills and prompts for token cost, duplication and contradictions. Use when adding skills or rules, or instructions feel bloated or conflicting.
 license: MIT
 metadata:
   category: workflow
