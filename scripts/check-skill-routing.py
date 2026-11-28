@@ -84,6 +84,7 @@ REQUIRED_SUPPORT_FILES = {
     "adversarial-implementation": ("adversarial-roles.md", "critic-recipes.md"),
     "adversarial-review": ("adversarial-roles.md", "critic-recipes.md"),
     "adversarial-test": ("adversarial-roles.md", "critic-recipes.md"),
+    "orchestrate": ("ledger-template.md",),
 }
 # Codex ignores `disable-model-invocation`; its own per-skill policy file keeps these skills explicit-only.
 CODEX_POLICY_SKILLS = ("retro", "grill-me", "raise-the-bar")
