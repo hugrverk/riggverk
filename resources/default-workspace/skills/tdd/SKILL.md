@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: Drives one specified behavior at a time through a red → green → refactor loop using public interfaces and the repo's test style. Use when expected behavior is known and a feature, fix or regression test should be written test-first. Not for unknown root causes (diagnose).
+description: Drives one specified behavior at a time, red-green-refactor. Use when expected behavior is known for a feature, fix or regression test. Not for unknown root causes (diagnose).
 license: MIT
 metadata:
   category: testing

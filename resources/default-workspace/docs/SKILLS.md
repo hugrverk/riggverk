@@ -143,7 +143,7 @@ Packs and personal skills may keep `category`, `risk`, `targets` and `related` a
 
 ## Description standard
 
-The `description` is the only selection signal Codex, OpenCode, and Cursor see, so it carries the triggers. Format: one plain line of at most 300 characters, `<what>. Use when <concrete triggers>. Not for <nearest sibling> (<sibling-name>).` The `Not for` clause is optional. Avoid `: ` and ` #` in the text, since the value is written as a plain YAML scalar. Each skill also states a one-line `Done when:` exit criterion in its body. `scripts/check-skill-routing.py` lints these rules.
+The `description` is the only selection signal Codex, OpenCode, and Cursor see, so it carries the triggers. Format: one plain line of at most 180 characters, `<what>. Use when <concrete triggers>. Not for <nearest sibling> (<sibling-name>).` The `Not for` clause is optional. Avoid `: ` and ` #` in the text, since the value is written as a plain YAML scalar. Each skill also states a one-line `Done when:` exit criterion in its body. `scripts/check-skill-routing.py` lints these rules.
 
 ## Supporting files
 

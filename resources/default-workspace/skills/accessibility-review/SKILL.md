@@ -1,6 +1,6 @@
 ---
 name: accessibility-review
-description: Audits UI code or a running app for WCAG 2.2 AA risks in semantics, names, keyboard, focus, labels, contrast and reflow. Use when an accessibility review is requested or custom controls, modals, menus, live status or dynamic validation change. Not for visual direction (frontend-design).
+description: Audits UI for WCAG 2.2 AA risks. Use when an accessibility review is requested or modals, menus or custom controls change. Not for visual direction (frontend-design).
 license: MIT
 metadata:
   category: accessibility

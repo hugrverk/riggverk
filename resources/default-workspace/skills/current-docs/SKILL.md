@@ -1,6 +1,6 @@
 ---
 name: current-docs
-description: Checks official, version-matched docs before relying on recalled API, SDK, CLI, config, hook or platform behavior. Use when a decision depends on a specific version, an error suggests a renamed or removed option, or a dependency or tool is added or upgraded.
+description: Checks official, version-matched docs before relying on recalled API, SDK, CLI or config behavior. Use when a version matters, an option seems renamed, or a dependency is upgraded.
 license: MIT
 metadata:
   category: docs

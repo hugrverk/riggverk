@@ -62,7 +62,7 @@ Each recipe lists the files to touch, the command, and what fails if you forget.
 
 ### Change a skill
 
-- Edit `resources/default-workspace/skills/<name>/SKILL.md` (and its supporting files). The description is one plain line of at most 300 characters that contains "Use when"; the body has a one-line `Done when: ...` exit criterion, and a `## Harness notes` section, if present, is the last `##` section.
+- Edit `resources/default-workspace/skills/<name>/SKILL.md` (and its supporting files). The description is one plain line of at most 180 characters that contains "Use when"; the body has a one-line `Done when: ...` exit criterion, and a `## Harness notes` section, if present, is the last `##` section.
 - Update its row in `resources/default-workspace/docs/SKILLS.md` if the purpose changed. There is no count to update anywhere.
 - `git add -A && python3 scripts/generate.py write`: `shipped-digests` and `pre-manifest-ownership` record the new version so installs of the old one stay app-owned.
 - Forget it and `check-skill-routing.py` names the description problem; `generate.py check` names the stale ownership files.

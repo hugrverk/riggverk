@@ -1,6 +1,6 @@
 ---
 name: retro
-description: Reviews one coding session and proposes ranked improvements to the agent environment, not the code. Use when the user explicitly asks for a retro (/retro, or $retro in Codex), never on your own. Proposals only; applies nothing.
+description: Reviews a coding session and proposes improvements to the agent environment, not the code. Use when explicitly asked for a retro (/retro, or $retro in Codex), never on your own.
 license: MIT
 metadata:
   category: workflow

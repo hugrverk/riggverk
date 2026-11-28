@@ -1,6 +1,6 @@
 ---
 name: delegate
-description: Hands specified slices to other agent CLIs or subagents in worktrees, then reviews each like a PR and re-runs checks. Use when the user wants other agents used for mechanical or parallel work. Not for leading agents with a charter and ledger.
+description: Hands specified slices to other agent CLIs or subagents and reviews each. Use when the user wants other agents for mechanical or parallel work. Not for a whole goal (orchestrate).
 license: MIT
 compatibility: Needs a shell and git, plus at least one other coding-agent CLI with a headless mode (Codex, Claude Code, OpenCode) or subagents in the current harness.
 metadata:

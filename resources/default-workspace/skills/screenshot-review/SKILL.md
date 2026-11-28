@@ -1,6 +1,6 @@
 ---
 name: screenshot-review
-description: Critiques supplied screenshots of any UI, app, dashboard or document (web, native, terminal, charts, PDFs) into a ranked patch plan without edits. Use when the user shares screenshots to critique. Not for taking screenshots, live-browser checks (browser-qa) or building UI (frontend-design).
+description: Critiques supplied screenshots of any UI, app or document into a ranked patch plan without edits. Use when the user shares screenshots to critique.
 license: MIT
 metadata:
   category: frontend

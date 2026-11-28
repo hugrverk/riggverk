@@ -1,6 +1,6 @@
 ---
 name: frontend-design
-description: Chooses and implements visual direction for web and product UI, keeping an existing design system or choosing one direction. Use when building or restyling screens, layouts or components. Not for critiquing supplied screenshots (screenshot-review), a11y audits or runtime QA (browser-qa).
+description: Chooses and implements visual direction for web and product UI. Use when building or restyling screens, layouts or components. Not for screenshot critique (screenshot-review).
 license: MIT
 metadata:
   category: frontend

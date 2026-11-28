@@ -1,6 +1,6 @@
 ---
 name: zoom-out
-description: Maps unfamiliar code before editing, covering responsibility, callers, dependencies, data and state flow, external effects, risks, and the smallest safe next step. Use when asked how an area fits the system or before changing code you have not traced.
+description: Maps unfamiliar code and its callers, dependencies and data flow. Use when asked how an area fits the system or before changing untraced code.
 license: MIT
 metadata:
   category: architecture

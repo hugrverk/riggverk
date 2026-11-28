@@ -1,6 +1,6 @@
 ---
 name: release-notes
-description: Drafts user-facing release notes or a changelog section from commits and merged PRs since the last tag, in the project's format and language. Use when release notes, a changelog section or a summary of changes since a version is requested. Not for the go/no-go gate (release-check).
+description: Drafts user-facing release notes or a changelog since the last tag. Use when release notes or changes since a version are requested. Not for the go/no-go gate (release-check).
 license: MIT
 compatibility: Needs git. Reads PR titles and labels with an authenticated gh CLI when present; without it the draft rests on commit subjects.
 allowed-tools: Bash(git tag --list *) Bash(git tag --merged *) Bash(git describe *)

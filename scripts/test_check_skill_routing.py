@@ -348,8 +348,8 @@ class CheckSkillRoutingTests(unittest.TestCase):
         adapter.write_text(self.skill("tdd").read_text(encoding="utf-8"), encoding="utf-8")
         self.assert_fails("templates/skills is retired")
 
-    def test_description_over_300_chars_fails(self) -> None:
-        self.edit(self.skill("tdd"), "Not for unknown root causes (diagnose).", "Not for unknown root causes (diagnose). " + "x" * 80)
+    def test_description_over_the_limit_fails(self) -> None:
+        self.edit(self.skill("tdd"), "Not for unknown root causes (diagnose).", "Not for unknown root causes (diagnose). " + "x" * 300)
         self.assert_fails("description is")
 
     def test_description_without_use_when_fails(self) -> None:
@@ -379,7 +379,7 @@ class CheckSkillRoutingTests(unittest.TestCase):
     def test_description_budget_fails(self) -> None:
         # Mutate a copy of the budget by lowering it through the module constant.
         script = self.tree / "scripts/check-skill-routing.py"
-        self.edit(script, "CATALOG_DESCRIPTION_BUDGET = 8000", "CATALOG_DESCRIPTION_BUDGET = 100")
+        self.edit(script, "CATALOG_DESCRIPTION_BUDGET = 5500", "CATALOG_DESCRIPTION_BUDGET = 100")
         self.assert_fails("skill descriptions total")
 
     def test_on_request_skill_in_routing_bullet_fails(self) -> None:

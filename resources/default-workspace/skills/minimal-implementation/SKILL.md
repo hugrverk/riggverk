@@ -1,6 +1,6 @@
 ---
 name: minimal-implementation
-description: Implements the smallest complete change fitting existing ownership, then simplifies and runs the narrowest falsifying check. Use when the direction is clear and code must change. Not for slicing undefined work (implementation-plan) or an unknown root cause (diagnose).
+description: Implements the smallest complete change and runs the narrowest falsifying check. Use when the direction is clear and code must change or be refactored.
 license: MIT
 metadata:
   category: implementation

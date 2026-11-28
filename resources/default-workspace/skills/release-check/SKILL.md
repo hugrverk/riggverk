@@ -1,6 +1,6 @@
 ---
 name: release-check
-description: Runs a pre-merge or pre-deploy gate with the repo's release script, git state, build and test, migration and env risk, smoke routes, rollback plan, and a go/no-go verdict. Use when asked whether a branch is ready to merge, release or deploy.
+description: Runs a go/no-go gate before merge or deploy with the repo's release script and rollback plan. Use when asked if a branch is ready to merge, release or deploy.
 license: MIT
 context: fork
 agent: verifier
