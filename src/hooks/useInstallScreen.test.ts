@@ -133,7 +133,8 @@ describe("useInstallScreen", () => {
     expect(h.options.switchView).not.toHaveBeenCalled();
     expect(result.current.scope).toBe("start");
     expect(result.current.isOpenOn("start")).toBe(true);
-    expect(result.current.flow.request).toMatchObject({ label: "update claude", surfaces: ["claude_rules", "claude_agents", "skills"] });
+    // claude_config is named with its targets off: the backend plans it only to take the app's values out.
+    expect(result.current.flow.request).toMatchObject({ label: "update claude", surfaces: ["claude_rules", "claude_agents", "claude_config", "skills"] });
   });
 
   it("opens a read-only review for previews", async () => {

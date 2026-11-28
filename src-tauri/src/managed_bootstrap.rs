@@ -340,6 +340,7 @@ pub fn infer_bootstrap_records(
                 hash,
                 surface: None,
                 role_models: Default::default(),
+                owned_values: None,
             });
         }
     }
@@ -370,6 +371,7 @@ pub fn infer_bootstrap_records(
                 hash,
                 surface: surface_record_label(&artifact),
                 role_models: Default::default(),
+                owned_values: None,
             });
         }
     }
@@ -393,6 +395,7 @@ pub fn infer_bootstrap_records(
                         hash,
                         surface: surface_record_label(&artifact),
                         role_models: Default::default(),
+                        owned_values: None,
                     });
                 }
             }
@@ -411,6 +414,7 @@ pub fn infer_bootstrap_records(
                         hash,
                         surface: Some("open_code_agents".into()),
                         role_models: Default::default(),
+                        owned_values: None,
                     });
                 }
             }

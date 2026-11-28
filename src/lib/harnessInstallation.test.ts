@@ -12,10 +12,13 @@ import {
   HARNESS_SURFACES,
   isLightAgent,
   isSurfaceEnabled,
+  requestedSetupSurfaces,
+  requestedSurfacesForHarness,
   supportTier,
   surfacesNeedingApply,
   TARGET_SURFACES,
   targetIdForSurface,
+  targetIdsForSurface,
   type SetupTargetId,
 } from "./harnessInstallation";
 import {
@@ -103,6 +106,7 @@ describe("target to surface mapping", () => {
       claude_rules: ["claude_rules"],
       claude_agents: ["claude_agents"],
       claude_config: ["claude_config"],
+      claude_skill_overrides: ["claude_config"],
       cursor_setup: ["cursor_agents", "cursor_mcp"],
       copilot_rules: ["copilot_rules"],
       copilot_mcp: ["copilot_mcp"],
@@ -116,9 +120,10 @@ describe("target to surface mapping", () => {
     });
   });
 
-  it("gates a surface by exactly one target and never gates skills or the workspace bundle", () => {
+  it("gates a surface by one target, claude_config by two, and never gates skills or the workspace bundle", () => {
     const gated = Object.values(TARGET_SURFACES).flat();
-    expect(new Set(gated).size).toBe(gated.length);
+    expect(gated.filter((surface) => surface !== "claude_config").length).toBe(new Set(gated).size - 1);
+    expect(gated.filter((surface) => surface === "claude_config")).toHaveLength(2);
     expect(targetIdForSurface("cursor_mcp")).toBe("cursor_setup");
     expect(targetIdForSurface("open_code_config")).toBe("opencode_config");
     for (const ungated of ["skills", "workspace_bundle"] as const) {
@@ -135,8 +140,8 @@ describe("target to surface mapping", () => {
     expect(harnessForSurface("workspace_bundle")).toBeNull();
   });
 
-  it("defaults every target on except codex_config, claude_config, kilo_mcp, antigravity_mcp and grok_mcp", () => {
-    const off = ["codex_config", "claude_config", "kilo_mcp", "antigravity_mcp", "grok_mcp"];
+  it("defaults every target on except codex_config, claude_config, claude_skill_overrides, kilo_mcp, antigravity_mcp and grok_mcp", () => {
+    const off = ["codex_config", "claude_config", "claude_skill_overrides", "kilo_mcp", "antigravity_mcp", "grok_mcp"];
     for (const id of off) expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain(id);
     const expected = (Object.keys(TARGET_SURFACES) as SetupTargetId[]).filter((id) => !off.includes(id));
     expect([...DEFAULT_ENABLED_TARGET_IDS].sort()).toEqual(expected.sort());
@@ -159,6 +164,28 @@ describe("target-filtered surfaces", () => {
     expect(enabledSurfacesForHarness("claude", on)).toEqual(HARNESS_SURFACES.claude);
     expect(targetIdForSurface("claude_config")).toBe("claude_config");
     expect(harnessForSurface("claude_config")).toBe("claude");
+  });
+
+  it("turns claude_config on with either of its two targets, and names the first", () => {
+    expect(targetIdsForSurface("claude_config")).toEqual(["claude_config", "claude_skill_overrides"]);
+    expect(targetIdForSurface("claude_config")).toBe("claude_config");
+    expect(targetIdsForSurface("skills")).toEqual([]);
+    expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("claude_skill_overrides");
+    for (const on of [["claude_config"], ["claude_skill_overrides"], ["claude_config", "claude_skill_overrides"]]) {
+      const settings = defaults({ enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS, ...on] });
+      expect(isSurfaceEnabled(settings, "claude_config")).toBe(true);
+      expect(enabledSurfacesForHarness("claude", settings)).toEqual(HARNESS_SURFACES.claude);
+    }
+    expect(isSurfaceEnabled(defaults(), "claude_config")).toBe(false);
+  });
+
+  it("requests claude_config while Claude is on even with both targets off, so the app can take its values out", () => {
+    expect(enabledSurfacesForHarness("claude", defaults())).not.toContain("claude_config");
+    expect(requestedSurfacesForHarness("claude", defaults())).toEqual(HARNESS_SURFACES.claude);
+    expect(requestedSurfacesForHarness("codex", defaults())).not.toContain("codex_config");
+    expect(requestedSurfacesForHarness("claude", defaults({ enabled_harness_ids: ["codex"] }))).toEqual([]);
+    expect(requestedSetupSurfaces(defaults())).toContain("claude_config");
+    expect(requestedSetupSurfaces(defaults({ enabled_harness_ids: ["codex"] }))).not.toContain("claude_config");
   });
 
   it("keeps skills surfaces when every target of a harness is off", () => {

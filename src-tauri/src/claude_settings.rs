@@ -1,10 +1,19 @@
-//! The attribution keys of Claude Code's `settings.json`.
+//! The keys the app manages in Claude Code's `settings.json`.
 //!
-//! `~/.claude/settings.json` is the user's file. The app manages two leaf values in it, and only
-//! while the `claude_config` target is on: `attribution.commit` and `attribution.pr`. Install sets
+//! `~/.claude/settings.json` is the user's file. The app manages two groups of leaf values in it.
+//! While the `claude_config` target is on: `attribution.commit` and `attribution.pr`. Install sets
 //! both to `""`, which hides Claude Code's `Co-Authored-By` commit trailer and its "Generated with
-//! Claude Code" pull request line. Every other key (`env`, `hooks`, `permissions`, ...) keeps its
-//! value and its place in the file. The values are constants of the app; there is no bundled file.
+//! Claude Code" pull request line. While the `claude_skill_overrides` target is on:
+//! `skillOverrides.<name>` set to `"name-only"` for the skills in [`ON_REQUEST_SKILLS`], so Claude
+//! Code lists them by name and starts them only when asked for. Every other key (`env`, `hooks`,
+//! `permissions`, ...) keeps its value and its place in the file. The values are constants of the
+//! app; there is no bundled file.
+//!
+//! The overrides are written and removed per leaf: an Update writes a leaf only where the key is
+//! absent, and records it with the digest of the value (`ManagedArtifactRecord::owned_values`).
+//! Once the target is off, the next Update removes exactly the recorded leaves that still hold
+//! that value, and the `skillOverrides` object itself when the app created it and nothing is left
+//! in it. A value the user set, even `"name-only"`, is never written, recorded or removed.
 //!
 //! The app writes only where the user has not said anything about attribution: a file without
 //! both keys. A file that already has one of them, custom text, `attribution: false` or the older
@@ -37,6 +46,26 @@ pub const CONFIG_DIR_REASON: &str =
 /// Why a file whose `attribution` key has a type nobody writes is left alone. A fixed phrase.
 const UNEXPECTED_TYPE_REASON: &str =
     "settings.json: attribution has an unexpected type; the app writes nothing";
+
+/// The skills Claude Code lists by name only while `claude_skill_overrides` is on: the ones that
+/// start on request, in the order they are written. Measured with Claude Code 2.1.323: a
+/// name-only skill still starts when a request asks for it in plain words.
+pub const ON_REQUEST_SKILLS: [&str; 7] = [
+    "grill-me",
+    "raise-the-bar",
+    "retro",
+    "orchestrate",
+    "adversarial-implementation",
+    "adversarial-review",
+    "adversarial-test",
+];
+/// The key holding the overrides, and the value written for each skill.
+pub const OVERRIDES: &str = "skillOverrides";
+const OVERRIDE_VALUE: &str = "name-only";
+
+/// Why a file whose `skillOverrides` key is not an object is left alone. A fixed phrase.
+const OVERRIDES_TYPE_REASON: &str =
+    "settings.json: skillOverrides has an unexpected type; the app writes nothing";
 
 /// Whether an environment value moves Claude Code's config folder away from `~/.claude`.
 pub fn config_dir_override_for(value: Option<&str>) -> bool {
@@ -182,6 +211,7 @@ pub fn refusal_reason(refusal: Refusal) -> String {
 
 /// Why the file is left alone when its state is the reason; `None` for the states that are not
 /// conflicts.
+#[cfg(test)]
 pub fn conflict_reason(assessment: &Assessment) -> Option<String> {
     match assessment {
         Assessment::Refused(refusal) => Some(refusal_reason(*refusal)),
@@ -190,44 +220,36 @@ pub fn conflict_reason(assessment: &Assessment) -> Option<String> {
     }
 }
 
-/// The content install writes: the file at `dest` (or an empty one) with the two values added.
-/// Only a file that says nothing about attribution is written; any other state is refused before
-/// anything is written, whatever the plan said.
+/// The content an install of the attribution values alone writes: the file at `dest` (or an
+/// empty one) with the two values added. Only a file that says nothing about attribution is
+/// written; any other state is refused.
+#[cfg(test)]
 pub fn render_install(dest: &Path) -> Result<String, String> {
-    let mut config = read(dest)
-        .map_err(|refusal| format!("refusing to change {}", refusal_reason(refusal)))?
-        .unwrap_or_default();
-    match classify(&config) {
-        Assessment::Missing => {}
-        Assessment::UnexpectedType => {
-            return Err(format!("refusing to change {UNEXPECTED_TYPE_REASON}"));
-        }
-        _ => {
-            return Err(
-                "refusing to change settings.json: it already says how attribution is shown"
-                    .to_string(),
-            );
-        }
+    let wanted = Wanted {
+        attribution: true,
+        overrides: false,
+    };
+    match plan(dest, wanted, false, &Owned::new()) {
+        Outcome::Write { content, .. } => Ok(content),
+        Outcome::Conflict(reason) => Err(format!("refusing to change {reason}")),
+        Outcome::Current { .. } | Outcome::UsersAttribution => Err(
+            "refusing to change settings.json: it already says how attribution is shown"
+                .to_string(),
+        ),
     }
-    let managed = managed_values();
-    match config.get_mut(ATTRIBUTION) {
-        Some(Value::Object(attribution)) => {
-            for (key, value) in managed {
-                attribution.insert(key, value);
-            }
-        }
-        _ => {
-            config.insert(ATTRIBUTION.to_string(), Value::Object(managed));
-        }
-    }
-    render(config)
 }
 
 /// The installed file with the two values put back as `backup` had them (and the ones it lacked
-/// taken out again); everything else stays as it is now. An `attribution` object the apply
-/// created goes with them. An installed file or a backup that no longer reads as strict JSON, or
-/// whose `attribution` is not an object where it must be, is an error: nothing is written.
-pub fn render_restored(installed: &Path, backup: &Path) -> Result<String, String> {
+/// taken out again), and the overrides `leaves` says the write changed undone as
+/// [`restore_overrides`] does (none without `leaves`); everything else
+/// stays as it is now. An `attribution` object the apply created goes with them. An installed
+/// file or a backup that no longer reads as strict JSON, or whose `attribution` is not an object
+/// where it must be, is an error: nothing is written.
+pub fn render_restored(
+    installed: &Path,
+    backup: &Path,
+    leaves: Option<&Leaves>,
+) -> Result<String, String> {
     let mut current = read(installed)
         .map_err(|refusal| {
             format!(
@@ -239,38 +261,341 @@ pub fn render_restored(installed: &Path, backup: &Path) -> Result<String, String
     let previous = read(backup)
         .map_err(|refusal| format!("backup of settings.json is unusable: {}", refusal.message()))?
         .ok_or_else(|| "backup of settings.json is missing".to_string())?;
-    let backup_attribution = match previous.get(ATTRIBUTION) {
-        None => None,
-        Some(Value::Object(attribution)) => Some(attribution),
-        // `attribution: false` is the user's and was never planned for a write.
-        Some(_) => return Err("backup of settings.json is unusable: attribution".to_string()),
-    };
-    match current.get_mut(ATTRIBUTION) {
-        // The user removed it since: the managed values are gone, nothing is added back.
-        None => {}
-        Some(Value::Object(attribution)) => {
-            for key in MANAGED_KEYS {
-                match backup_attribution.and_then(|backed_up| backed_up.get(key)) {
-                    Some(value) => {
-                        attribution.insert(key.to_string(), value.clone());
-                    }
-                    None => {
-                        attribution.shift_remove(key);
+    // A write of the overrides alone left the attribution values as they were: they stay,
+    // whatever the user keeps there (`attribution: false` included).
+    if managed_projection(&current) != managed_projection(&previous) {
+        let backup_attribution = match previous.get(ATTRIBUTION) {
+            None => None,
+            Some(Value::Object(attribution)) => Some(attribution),
+            // `attribution: false` is the user's and was never planned for a write.
+            Some(_) => return Err("backup of settings.json is unusable: attribution".to_string()),
+        };
+        match current.get_mut(ATTRIBUTION) {
+            // The user removed it since: the managed values are gone, nothing is added back.
+            None => {}
+            Some(Value::Object(attribution)) => {
+                for key in MANAGED_KEYS {
+                    match backup_attribution.and_then(|backed_up| backed_up.get(key)) {
+                        Some(value) => {
+                            attribution.insert(key.to_string(), value.clone());
+                        }
+                        None => {
+                            attribution.shift_remove(key);
+                        }
                     }
                 }
+                if backup_attribution.is_none() && attribution.is_empty() {
+                    current.shift_remove(ATTRIBUTION);
+                }
             }
-            if backup_attribution.is_none() && attribution.is_empty() {
-                current.shift_remove(ATTRIBUTION);
+            Some(_) => {
+                return Err(
+                    "installed settings.json cannot be restored: attribution has an unexpected type"
+                        .to_string(),
+                );
             }
-        }
-        Some(_) => {
-            return Err(
-                "installed settings.json cannot be restored: attribution has an unexpected type"
-                    .to_string(),
-            );
         }
     }
+    if let Some(leaves) = leaves {
+        restore_overrides(&mut current, leaves)?;
+    }
     render(current)
+}
+
+/// Which groups of values the enabled targets want in the file.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Wanted {
+    pub attribution: bool,
+    pub overrides: bool,
+}
+
+/// The leaves the app owns, as its record holds them: JSON path to the digest of the value.
+pub type Owned = std::collections::BTreeMap<String, String>;
+
+/// What one write changes, per leaf, for the review, the status and the ownership record. The
+/// transaction manifest keeps it too, so that an undo touches only what that write did.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Leaves {
+    /// The two attribution values are added.
+    pub attribution: bool,
+    /// The paths of the overrides added (`skillOverrides.retro`), and of the ones removed.
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    /// The write creates the `skillOverrides` object, or takes away the one the app created.
+    pub created_object: bool,
+    pub dropped_object: bool,
+}
+
+impl Leaves {
+    fn is_empty(&self) -> bool {
+        *self == Leaves::default()
+    }
+
+    /// Whether the write adds or removes anything of the overrides.
+    pub fn touches_overrides(&self) -> bool {
+        !self.added.is_empty()
+            || !self.removed.is_empty()
+            || self.created_object
+            || self.dropped_object
+    }
+}
+
+/// How the file stands against what the targets want and what the app owns.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Outcome {
+    /// Write `content` over the file whose full digest is `expected_installed_digest`
+    /// ([`crate::stable_digest::ABSENT`] when there is none).
+    Write {
+        leaves: Leaves,
+        content: String,
+        expected_installed_digest: String,
+    },
+    /// Nothing to write; `file` is whether there is a file.
+    Current { file: bool },
+    /// Nothing to write, and the attribution the target wants is the user's own.
+    UsersAttribution,
+    /// The file is left alone; a fixed phrase, never file text.
+    Conflict(String),
+}
+
+/// The path of the override of `name`.
+pub fn override_path(name: &str) -> String {
+    format!("{OVERRIDES}.{name}")
+}
+
+fn override_digest() -> String {
+    value_digest(&Value::String(OVERRIDE_VALUE.to_string()))
+}
+
+fn value_digest(value: &Value) -> String {
+    crate::stable_digest::bytes(serde_json::to_string(value).unwrap_or_default().as_bytes())
+}
+
+/// The digest an owned path is recorded with: the value written, or an empty object for the
+/// `skillOverrides` object the app created.
+fn written_digest(path: &str) -> String {
+    if path == OVERRIDES {
+        value_digest(&Value::Object(Map::new()))
+    } else {
+        override_digest()
+    }
+}
+
+/// The paths of `owned` that `config` still holds as the app wrote them: a leaf with the
+/// recorded digest, the object while it is an object.
+pub fn still_owned(config: &Map<String, Value>, owned: &Owned) -> Owned {
+    let overrides = config.get(OVERRIDES);
+    owned
+        .iter()
+        .filter(|(path, digest)| {
+            if path.as_str() == OVERRIDES {
+                return overrides.is_some_and(Value::is_object);
+            }
+            path.strip_prefix(&format!("{OVERRIDES}."))
+                .and_then(|name| overrides.and_then(|value| value.get(name)))
+                .is_some_and(|value| value_digest(value) == **digest)
+        })
+        .map(|(path, digest)| (path.clone(), digest.clone()))
+        .collect()
+}
+
+/// `owned` after a write that changed `leaves`.
+pub fn owned_after(owned: Option<&Owned>, leaves: &Leaves) -> Owned {
+    let mut next = owned.cloned().unwrap_or_default();
+    for path in &leaves.removed {
+        next.remove(path);
+    }
+    if leaves.dropped_object {
+        next.remove(OVERRIDES);
+    }
+    for path in &leaves.added {
+        next.insert(path.clone(), written_digest(path));
+    }
+    if leaves.created_object {
+        next.insert(OVERRIDES.to_string(), written_digest(OVERRIDES));
+    }
+    next
+}
+
+/// What the app writes into the file at `dest`. `attribution_owned` is whether the record proves
+/// the attribution values already in the file are the app's. Each group is looked at only while
+/// its target wants it, or, for the overrides, while the app owns one of them: without either the
+/// file stands as it did before the overrides existed.
+pub fn plan(dest: &Path, wanted: Wanted, attribution_owned: bool, owned: &Owned) -> Outcome {
+    let installed = match read(dest) {
+        Ok(installed) => installed,
+        Err(refusal) => return Outcome::Conflict(refusal_reason(refusal)),
+    };
+    let file = installed.is_some();
+    let mut config = installed.unwrap_or_default();
+    let mut leaves = Leaves::default();
+    let mut users_attribution = false;
+    if wanted.attribution {
+        match classify(&config) {
+            Assessment::Missing => {
+                add_attribution(&mut config);
+                leaves.attribution = true;
+            }
+            Assessment::Hidden if attribution_owned => {}
+            Assessment::UnexpectedType => {
+                return Outcome::Conflict(UNEXPECTED_TYPE_REASON.to_string());
+            }
+            _ => users_attribution = true,
+        }
+    }
+    if wanted.overrides || !owned.is_empty() {
+        match config.get(OVERRIDES) {
+            None | Some(Value::Object(_)) => {}
+            Some(_) => return Outcome::Conflict(OVERRIDES_TYPE_REASON.to_string()),
+        }
+        if wanted.overrides {
+            add_overrides(&mut config, &mut leaves);
+        } else {
+            let owned = still_owned(&config, owned);
+            remove_overrides(&mut config, &owned, &mut leaves);
+        }
+    }
+    if leaves.is_empty() {
+        return if users_attribution {
+            Outcome::UsersAttribution
+        } else {
+            Outcome::Current { file }
+        };
+    }
+    let expected_installed_digest = if file {
+        match crate::stable_digest::file(dest) {
+            Ok(digest) => digest,
+            Err(_) => return Outcome::Conflict(refusal_reason(Refusal::Unreadable)),
+        }
+    } else {
+        crate::stable_digest::ABSENT.to_string()
+    };
+    match render(config) {
+        Ok(content) => Outcome::Write {
+            leaves,
+            content,
+            expected_installed_digest,
+        },
+        Err(_) => Outcome::Conflict(refusal_reason(Refusal::Unreadable)),
+    }
+}
+
+fn add_attribution(config: &mut Map<String, Value>) {
+    let managed = managed_values();
+    match config.get_mut(ATTRIBUTION) {
+        Some(Value::Object(attribution)) => {
+            for (key, value) in managed {
+                attribution.insert(key, value);
+            }
+        }
+        _ => {
+            config.insert(ATTRIBUTION.to_string(), Value::Object(managed));
+        }
+    }
+}
+
+/// Adds the override of every skill whose key is absent; a key that is there is the user's.
+fn add_overrides(config: &mut Map<String, Value>, leaves: &mut Leaves) {
+    if !config.contains_key(OVERRIDES) {
+        config.insert(OVERRIDES.to_string(), Value::Object(Map::new()));
+        leaves.created_object = true;
+    }
+    let Some(Value::Object(overrides)) = config.get_mut(OVERRIDES) else {
+        return;
+    };
+    for name in ON_REQUEST_SKILLS {
+        if !overrides.contains_key(name) {
+            overrides.insert(name.to_string(), Value::String(OVERRIDE_VALUE.to_string()));
+            leaves.added.push(override_path(name));
+        }
+    }
+    if leaves.created_object && leaves.added.is_empty() {
+        config.shift_remove(OVERRIDES);
+        leaves.created_object = false;
+    }
+}
+
+/// Removes the owned leaves (`owned` holds only those still as the app wrote them), and with
+/// them the object when the app created it and nothing is left in it. An object the user emptied
+/// by hand stays: a write never only drops it.
+fn remove_overrides(config: &mut Map<String, Value>, owned: &Owned, leaves: &mut Leaves) {
+    let Some(Value::Object(overrides)) = config.get_mut(OVERRIDES) else {
+        return;
+    };
+    for name in ON_REQUEST_SKILLS {
+        let path = override_path(name);
+        if owned.contains_key(&path) {
+            overrides.shift_remove(name);
+            leaves.removed.push(path);
+        }
+    }
+    if overrides.is_empty() && owned.contains_key(OVERRIDES) && !leaves.removed.is_empty() {
+        config.shift_remove(OVERRIDES);
+        leaves.dropped_object = true;
+    }
+}
+
+/// The name of an override path (`skillOverrides.retro` is `retro`).
+fn override_name(path: &str) -> Option<&str> {
+    path.strip_prefix(OVERRIDES)?.strip_prefix('.')
+}
+
+/// Whether undoing the write that changed `leaves` still has something to do in `current`: a leaf
+/// it added that still holds the app's value, or a leaf it removed that is still absent.
+fn override_restore_pending(current: &Map<String, Value>, leaves: &Leaves) -> bool {
+    let overrides = current.get(OVERRIDES).and_then(Value::as_object);
+    let leaf = |path: &String| {
+        override_name(path).and_then(|name| overrides.and_then(|overrides| overrides.get(name)))
+    };
+    let ours = Value::String(OVERRIDE_VALUE.to_string());
+    leaves.added.iter().any(|path| leaf(path) == Some(&ours))
+        || leaves.removed.iter().any(|path| leaf(path).is_none())
+}
+
+/// Whether an undo of the write that changed `leaves` still has an override to put back or take
+/// out of the installed file (see [`restore_overrides`]). A file that cannot be read has none:
+/// the attribution digest already tells such a file apart.
+pub fn overrides_differ(installed: &Path, leaves: &Leaves) -> bool {
+    match read(installed) {
+        Ok(current) => override_restore_pending(&current.unwrap_or_default(), leaves),
+        Err(_) => false,
+    }
+}
+
+/// Undoes what the write that changed `leaves` did to the overrides, where the file still holds
+/// what it left: a leaf it added goes while it is still `"name-only"`, a leaf it removed comes
+/// back while it is still absent. Nothing else is touched, so a value the user added, changed or
+/// deleted since stays as they left it. An object the write created goes when nothing is left
+/// in it; one it removed comes back with its leaves.
+fn restore_overrides(current: &mut Map<String, Value>, leaves: &Leaves) -> Result<(), String> {
+    if !override_restore_pending(current, leaves) {
+        return Ok(());
+    }
+    let ours = Value::String(OVERRIDE_VALUE.to_string());
+    if !current.contains_key(OVERRIDES) {
+        current.insert(OVERRIDES.to_string(), Value::Object(Map::new()));
+    }
+    let Some(Value::Object(overrides)) = current.get_mut(OVERRIDES) else {
+        return Err(
+            "installed settings.json cannot be restored: skillOverrides has an unexpected type"
+                .to_string(),
+        );
+    };
+    for name in leaves.added.iter().filter_map(|path| override_name(path)) {
+        if overrides.get(name) == Some(&ours) {
+            overrides.shift_remove(name);
+        }
+    }
+    for name in leaves.removed.iter().filter_map(|path| override_name(path)) {
+        if !overrides.contains_key(name) {
+            overrides.insert(name.to_string(), ours.clone());
+        }
+    }
+    if leaves.created_object && overrides.is_empty() {
+        current.shift_remove(OVERRIDES);
+    }
+    Ok(())
 }
 
 fn render(config: Map<String, Value>) -> Result<String, String> {
@@ -317,6 +642,21 @@ mod tests {
             serde_json::to_string(&managed_values()).unwrap(),
             r#"{"commit":"","pr":""}"#
         );
+    }
+
+    #[test]
+    fn every_on_request_skill_is_a_bundled_skill() {
+        use crate::skill_sources::SourceRoot;
+        let bundled = crate::setup_roots::bundled_root().expect("bundle");
+        let catalog: Vec<String> = crate::skill_sources::BundleOnly(&bundled)
+            .catalog()
+            .expect("catalog")
+            .into_iter()
+            .map(|entry| entry.skill.name)
+            .collect();
+        for name in ON_REQUEST_SKILLS {
+            assert!(catalog.iter().any(|skill| skill == name), "{name}");
+        }
     }
 
     #[test]
@@ -491,7 +831,7 @@ mod tests {
         let backup = dir.join("backup.json");
         fs::write(&backup, USER_FILE).unwrap();
         fs::write(&dest, render_install(&backup).unwrap()).unwrap();
-        let restored = render_restored(&dest, &backup).expect("restored");
+        let restored = render_restored(&dest, &backup, None).expect("restored");
         assert_eq!(object(&restored), object(USER_FILE));
         assert_eq!(
             object(&restored).keys().collect::<Vec<_>>(),
@@ -511,7 +851,7 @@ mod tests {
         )
         .unwrap();
         fs::write(&dest, render_install(&backup).unwrap()).unwrap();
-        let restored = render_restored(&dest, &backup).expect("restored");
+        let restored = render_restored(&dest, &backup, None).expect("restored");
         assert_eq!(
             serde_json::to_string(&object(&restored)).unwrap(),
             r#"{"attribution":{"sessionUrl":true},"model":"x"}"#
@@ -519,7 +859,7 @@ mod tests {
         // An empty object the user had stays an empty object.
         fs::write(&backup, r#"{"attribution":{}}"#).unwrap();
         fs::write(&dest, render_install(&backup).unwrap()).unwrap();
-        let restored = render_restored(&dest, &backup).expect("restored");
+        let restored = render_restored(&dest, &backup, None).expect("restored");
         assert_eq!(
             serde_json::to_string(&object(&restored)).unwrap(),
             r#"{"attribution":{}}"#
@@ -543,7 +883,7 @@ mod tests {
             serde_json::to_string_pretty(&Value::Object(later)).unwrap(),
         )
         .unwrap();
-        let restored = object(&render_restored(&dest, &backup).expect("restored"));
+        let restored = object(&render_restored(&dest, &backup, None).expect("restored"));
         assert_eq!(restored.get("model"), Some(&Value::String("sonnet".into())));
         assert_eq!(
             restored.get("attribution"),
@@ -560,14 +900,14 @@ mod tests {
         let backup = dir.join("backup.json");
         fs::write(&backup, USER_FILE).unwrap();
         fs::write(&dest, "{\n  // SECRET-MARKER\n}\n").unwrap();
-        let error = render_restored(&dest, &backup).expect_err("refused");
+        let error = render_restored(&dest, &backup, None).expect_err("refused");
         assert!(!error.contains("SECRET-MARKER"), "{error}");
         fs::write(&dest, r#"{"attribution":"SECRET-MARKER"}"#).unwrap();
-        let error = render_restored(&dest, &backup).expect_err("refused");
+        let error = render_restored(&dest, &backup, None).expect_err("refused");
         assert!(!error.contains("SECRET-MARKER"), "{error}");
         fs::write(&dest, "{}").unwrap();
         fs::write(&backup, "[\"SECRET-MARKER\"]").unwrap();
-        let error = render_restored(&dest, &backup).expect_err("refused");
+        let error = render_restored(&dest, &backup, None).expect_err("refused");
         assert!(!error.contains("SECRET-MARKER"), "{error}");
         let _ = fs::remove_dir_all(dir);
     }

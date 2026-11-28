@@ -1247,6 +1247,7 @@ mod tests {
             hash: crate::stable_digest::bytes(recorded.as_bytes()),
             surface: None,
             role_models: Default::default(),
+            owned_values: None,
         };
         // A shipped older version.
         let (older, _guard) = shipped_alpha_v1();

@@ -3864,6 +3864,7 @@ fn install_for(ws: &Path, home: &Path) {
             hash: crate::stable_digest::bytes(b"record"),
             surface: None,
             role_models: pinned_role_models(home),
+            owned_values: None,
         }],
     };
     crate::managed_state::write_managed_state_atomic(&record_root(home), &state)

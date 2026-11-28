@@ -1823,6 +1823,7 @@ mod tests {
                     hash: crate::stable_digest::bytes(recorded_template.as_bytes()),
                     surface: None,
                     role_models: Default::default(),
+                    owned_values: None,
                 }],
             },
         )

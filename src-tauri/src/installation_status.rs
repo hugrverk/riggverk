@@ -408,8 +408,9 @@ fn mcp_detail(
     }
 }
 
-/// Status line for Claude's attribution setting; `None` for every other artifact and for states
-/// the generic line already covers. Fixed phrases only, never text of the file.
+/// Status line for Claude's `settings.json`; `None` for every other artifact and for states the
+/// generic line already covers. Fixed phrases only, never text of the file. While only the
+/// attribution target is on, the lines are those from before the overrides existed.
 fn claude_settings_detail(
     planned: &setup_transaction::PlannedArtifact,
     workspace_root: &Path,
@@ -418,15 +419,48 @@ fn claude_settings_detail(
     if planned.artifact != crate::artifact_registry::ArtifactId::ClaudeSettings {
         return None;
     }
+    const ATTRIBUTION_WRITE: &str = "hides Claude Code's Co-Authored-By commit line and \"Generated with Claude Code\" PR line · sets attribution.commit and attribution.pr to \"\" in ~/.claude/settings.json · other settings stay";
+    const OVERRIDES_CURRENT: &str = "on-request skills listed by name only";
+    const OVERRIDE_TAIL: &str =
+        "a project's .claude/settings.json or managed settings can override it";
+    let wanted = setup_transaction::claude_settings_wanted()
+        .map(|(wanted, _)| wanted)
+        .unwrap_or_default();
     match planned.kind {
-        OperationKind::NoChange => Some(
-            "attribution hidden by Riggverk · a project's .claude/settings.json or managed settings can override it"
-                .to_string(),
-        ),
-        OperationKind::Create | OperationKind::Update => Some(
-            "hides Claude Code's Co-Authored-By commit line and \"Generated with Claude Code\" PR line · sets attribution.commit and attribution.pr to \"\" in ~/.claude/settings.json · other settings stay"
-                .to_string(),
-        ),
+        OperationKind::NoChange => {
+            let mut parts = Vec::new();
+            if wanted.attribution {
+                parts.push("attribution hidden by Riggverk");
+            }
+            if wanted.overrides {
+                parts.push(OVERRIDES_CURRENT);
+            }
+            parts.push(OVERRIDE_TAIL);
+            Some(parts.join(" · "))
+        }
+        OperationKind::Create | OperationKind::Update => {
+            let leaves = planned.settings.clone().unwrap_or_default();
+            let mut parts: Vec<String> = Vec::new();
+            if leaves.attribution {
+                parts.push(ATTRIBUTION_WRITE.to_string());
+            }
+            if !leaves.added.is_empty() {
+                parts.push(format!(
+                    "lists {} on-request skill{} by name only · sets skillOverrides in ~/.claude/settings.json · other settings stay",
+                    leaves.added.len(),
+                    if leaves.added.len() == 1 { "" } else { "s" }
+                ));
+            }
+            if !leaves.removed.is_empty() {
+                parts.push(if wanted.attribution || wanted.overrides {
+                    "skill overrides off · Riggverk's values are removed at the next update"
+                        .to_string()
+                } else {
+                    "off · Riggverk's values are removed at the next update".to_string()
+                });
+            }
+            (!parts.is_empty()).then(|| parts.join(" · "))
+        }
         OperationKind::Manual => {
             Some("you set attribution yourself; Riggverk leaves it as is".to_string())
         }
@@ -592,6 +626,7 @@ mod tests {
             mcp: None,
             file: None,
             overwrite: None,
+            settings: None,
         }
     }
 

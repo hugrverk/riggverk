@@ -14,8 +14,10 @@ import type {
 } from "../types";
 import {
   harnessSurfaceStates,
+  RETIRING_SURFACES,
   TARGET_SURFACES,
   targetIdForSurface,
+  targetIdsForSurface,
   type SetupTargetId,
 } from "./harnessInstallation";
 
@@ -104,7 +106,8 @@ function statusRow(status: InstallationStatus | null | undefined, surface: Setup
 
 /**
  * Rows of the surface list for one target. Surfaces whose target toggle is off are listed as `off` and never
- * come from the status (they are not requested either).
+ * come from the status, except one the status still reports: its targets are off and the next update takes the app's
+ * values out of it (`RETIRING_SURFACES`).
  */
 export function surfaceRowsFor(
   id: OverviewId,
@@ -116,7 +119,7 @@ export function surfaceRowsFor(
       ? surfacesForOverview(id).map(surface => ({ surface, enabled: true, targetId: null as string | null }))
       : harnessSurfaceStates(id, settings);
   return states.map(({ surface, enabled, targetId }) => {
-    if (!enabled) {
+    if (!enabled && !(RETIRING_SURFACES.includes(surface) && statusRow(entry?.status, surface))) {
       return {
         surface,
         name: surfaceShortName(surface),
@@ -136,7 +139,7 @@ export function surfaceRowsFor(
       detail: row?.detail ?? "",
       state,
       display: STATE_DISPLAY[state],
-      targetId: null,
+      targetId: enabled ? null : targetId,
     };
   });
 }
@@ -162,6 +165,8 @@ export interface HarnessRowModel {
   targetEnabled: boolean | null;
   /** The other surfaces the same toggle gates. */
   alsoSurfaces: SetupSurfaceId[];
+  /** Further targets that gate the surface beside `targetId` (`claude_config`'s skill overrides), with their state. */
+  moreTargets: { targetId: SetupTargetId; target: AgentTargetMeta | null; enabled: boolean }[];
 }
 
 /**
@@ -189,6 +194,13 @@ export function harnessRowsFor(
       target,
       targetEnabled: targetId ? settings.enabled_target_ids.includes(targetId) : null,
       alsoSurfaces: gated.filter(surface => surface !== row.surface),
+      moreTargets: targetIdsForSurface(row.surface)
+        .slice(1)
+        .map(id => ({
+          targetId: id,
+          target: agentTargets.find(candidate => candidate.id === id) ?? null,
+          enabled: settings.enabled_target_ids.includes(id),
+        })),
     };
   });
 }

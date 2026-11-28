@@ -712,6 +712,7 @@ mod tests {
             mcp: None,
             file,
             overwrite: None,
+            settings: None,
         }
     }
 

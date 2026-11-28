@@ -129,6 +129,34 @@ describe("harnessRowsFor", () => {
     ]);
   });
 
+  it("gives claude_config a switch for each of its targets", () => {
+    const rows = harnessRowsFor(
+      "claude",
+      undefined,
+      { enabled_harness_ids: ["claude"], enabled_target_ids: ["claude_skill_overrides"] },
+      [{ id: "claude_skill_overrides", label: "claude skill overrides", harness: "claude", kind: "config", target_rel: ".claude/settings.json", source_rel: "" }],
+    );
+    const config = rows.find(row => row.surface === "claude_config");
+    expect(config).toMatchObject({ targetId: "claude_config", targetEnabled: false, state: "unknown" });
+    expect(config?.moreTargets).toEqual([
+      { targetId: "claude_skill_overrides", target: expect.objectContaining({ label: "claude skill overrides" }), enabled: true },
+    ]);
+    expect(rows.find(row => row.surface === "claude_rules")?.moreTargets).toEqual([]);
+  });
+
+  it("shows claude_config with both targets off from the status while the app still has values to take out", () => {
+    const off = { enabled_harness_ids: ["claude"] as "claude"[], enabled_target_ids: ["claude_rules"] };
+    const retiring = { ...surface("claude_config", "update_available"), detail: "off · Riggverk's values are removed at the next update" };
+    const rows = surfaceRowsFor("claude", entry("claude", status("update_available", [retiring])), off);
+    expect(rows.find(row => row.surface === "claude_config")).toMatchObject({
+      state: "update_available",
+      detail: "off · Riggverk's values are removed at the next update",
+      targetId: "claude_config",
+    });
+    // Without a status row it is off, as before.
+    expect(surfaceRowsFor("claude", undefined, off).find(row => row.surface === "claude_config")).toMatchObject({ state: "off" });
+  });
+
   it("keeps the off state of a toggled-off target and drops the backend detail", () => {
     const claude = entry("claude", status("current", [surface("claude_agents", "current")]));
     const rows = harnessRowsFor("claude", claude, { enabled_harness_ids: ["claude"], enabled_target_ids: ["claude_rules"] }, []);

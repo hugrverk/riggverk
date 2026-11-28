@@ -73,7 +73,8 @@ describe("useInstallationOverview", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     const requested = invokeMock.mock.calls.map(call => (call[1] as { surfaces: string[] }).surfaces);
     expect(requested).toContainEqual(["codex_rules", "skills"]);
-    expect(requested).toContainEqual(["claude_rules", "skills"]);
+    // claude_config is named with its targets off: the backend reports it only while it has values to take out.
+    expect(requested).toContainEqual(["claude_rules", "claude_config", "skills"]);
     expect(requested).toContainEqual(["skills"]);
     expect(requested.flat()).not.toContain("codex_config");
     expect(requested.flat()).not.toContain("claude_agents");

@@ -292,6 +292,11 @@ describe("installRequestFor", () => {
     expect(request.readOnly).toBe(false);
   });
 
+  it("asks for claude_config with its targets off, which the backend plans only to take the app's values out", () => {
+    expect(installRequestFor("claude", settings).surfaces).toEqual(["claude_rules", "claude_agents", "claude_config", "skills"]);
+    expect(installRequestFor("all", settings).surfaces).toContain("claude_config");
+  });
+
   it("covers the workspace bundle alone, or the workspace plus every enabled harness", () => {
     expect(installRequestFor("workspace", settings).surfaces).toEqual(["workspace_bundle"]);
     const all = installRequestFor("all", settings).surfaces;

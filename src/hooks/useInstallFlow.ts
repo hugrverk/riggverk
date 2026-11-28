@@ -18,7 +18,7 @@ export interface InstallFlowRequest {
   /** Output-pane label, e.g. "update claude". */
   label: string;
   /**
-   * Target-filtered surfaces to preview (see `enabledSurfacesForHarness`). Must not be empty:
+   * Target-filtered surfaces to preview (see `requestedSurfacesForHarness`). Must not be empty:
    * an empty list means "everything" to the backend, so it is rejected before any invoke.
    */
   surfaces: SetupSurfaceId[];

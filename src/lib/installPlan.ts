@@ -3,11 +3,11 @@ import type { Tone } from "../ui/tone";
 import type { AppSettings, InstallAgent, PackWrite, PlannedOperation, SetupResult, SetupSurfaceId } from "../types";
 import { resolvePointer } from "./fileConflicts";
 import {
-  enabledSetupSurfaces,
-  enabledSurfacesForHarness,
   HARNESS_LABELS,
   HARNESS_NAV_ORDER,
   harnessForSurface,
+  requestedSetupSurfaces,
+  requestedSurfacesForHarness,
   WORKSPACE_SURFACES,
 } from "./harnessInstallation";
 import { plural } from "./plural";
@@ -26,7 +26,8 @@ export function scopeForTarget(target: InstallTarget): InstallScope {
 
 /**
  * The request behind `u` / `:update` / `:preview`. Surfaces are target-filtered, so a surface whose
- * target toggle is off is never previewed or applied.
+ * target toggle is off is never previewed or applied, except a `RETIRING_SURFACES` one, which the
+ * backend plans only to take the app's values out again.
  */
 export function installRequestFor(
   target: InstallTarget,
@@ -37,8 +38,8 @@ export function installRequestFor(
     target === "workspace"
       ? [...WORKSPACE_SURFACES]
       : target === "all"
-        ? enabledSetupSurfaces(settings)
-        : enabledSurfacesForHarness(target, settings);
+        ? requestedSetupSurfaces(settings)
+        : requestedSurfacesForHarness(target, settings);
   return { label: `${readOnly ? "preview" : "update"} ${target}`, surfaces, readOnly };
 }
 

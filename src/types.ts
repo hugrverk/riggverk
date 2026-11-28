@@ -1005,6 +1005,8 @@ export interface UninstallPlanView {
   removable: UninstallItem[];
   preserved: UninstallItem[];
   merged: UninstallItem[];
+  /** Files of the user's the uninstall takes the app's values out of (Claude's skill overrides). */
+  edited: UninstallItem[];
   summary: string;
   plan_fingerprint: string | null;
   preview_token: string | null;
