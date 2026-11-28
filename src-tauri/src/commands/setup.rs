@@ -1520,6 +1520,7 @@ fn run_planned_artifacts(
             previous_state: p.previous_state,
             rollback_action: p.rollback_action,
             backup_rel,
+            settings_leaves: p.settings.clone(),
             ..Default::default()
         });
     }

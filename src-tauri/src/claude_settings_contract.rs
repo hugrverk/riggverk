@@ -961,6 +961,105 @@ mod tests {
     }
 
     #[test]
+    fn undo_of_an_attribution_write_keeps_an_override_the_user_added_since() {
+        let env = Env::new("undo-keeps-users-override");
+        env.write_settings(USER_FILE);
+        let result = env.apply();
+        let mut config = parse(&env.read_settings());
+        config.insert(
+            "skillOverrides".into(),
+            serde_json::json!({"retro": "name-only"}),
+        );
+        env.write_settings(&serde_json::to_string_pretty(&Value::Object(config)).unwrap());
+
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "rollback: {}", rolled.message);
+        let restored = parse(&env.read_settings());
+        assert_eq!(restored.get("attribution"), None, "the app's values go");
+        assert_eq!(
+            restored.get("skillOverrides"),
+            Some(&serde_json::json!({"retro": "name-only"})),
+            "the user's override stays"
+        );
+    }
+
+    #[test]
+    fn undo_never_puts_back_an_override_of_the_users_they_deleted_since() {
+        for overrides_on in [false, true] {
+            let env = Env::new("undo-keeps-users-deletion");
+            env.set_target(OVERRIDES_TARGET, overrides_on);
+            let mut config = parse(USER_FILE);
+            config.insert(
+                "skillOverrides".into(),
+                serde_json::json!({"retro": "name-only"}),
+            );
+            env.write_settings(&serde_json::to_string_pretty(&Value::Object(config)).unwrap());
+            let result = env.apply();
+            let mut config = parse(&env.read_settings());
+            if let Some(Value::Object(overrides)) = config.get_mut("skillOverrides") {
+                overrides.shift_remove("retro");
+            }
+            env.write_settings(&serde_json::to_string_pretty(&Value::Object(config)).unwrap());
+
+            let rolled =
+                rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+            assert!(rolled.success, "rollback: {}", rolled.message);
+            assert_eq!(
+                parse(&env.read_settings()).get("skillOverrides"),
+                Some(&serde_json::json!({})),
+                "overrides on: {overrides_on}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_edit_outside_attribution_after_the_preview_is_merged_as_before() {
+        let env = Env::new("attribution-edit-after-preview");
+        env.write_settings(USER_FILE);
+        let plan = preview_setup(vec![SURFACE.to_string()]).expect("preview");
+        let mut config = parse(USER_FILE);
+        config.insert("model".into(), Value::String("sonnet".into()));
+        env.write_settings(&serde_json::to_string_pretty(&Value::Object(config)).unwrap());
+        let result = apply_setup(
+            vec![SURFACE.to_string()],
+            false,
+            plan.plan_fingerprint,
+            plan.preview_token,
+        )
+        .expect("apply");
+        assert!(result.success, "apply: {}", result.message);
+        let installed = parse(&env.read_settings());
+        assert_eq!(
+            installed.get("model"),
+            Some(&Value::String("sonnet".into()))
+        );
+        assert_eq!(installed.get("attribution"), Some(&hidden()));
+    }
+
+    #[test]
+    fn an_attribution_write_shows_exactly_its_one_line() {
+        let env = Env::new("attribution-lines");
+        let details = || {
+            preview_setup(vec![SURFACE.to_string()])
+                .expect("preview")
+                .operations
+                .into_iter()
+                .find(|op| op.surface == SetupSurfaceId::ClaudeConfig)
+                .expect("operation")
+                .details
+        };
+        assert_eq!(
+            details(),
+            ["+ ~/.claude/settings.json (new file; hides commit and PR attribution)"]
+        );
+        env.write_settings(USER_FILE);
+        assert_eq!(
+            details(),
+            ["~ ~/.claude/settings.json (hides commit and PR attribution; other keys stay)"]
+        );
+    }
+
+    #[test]
     fn a_file_the_app_created_stays_when_a_strip_empties_it() {
         let env = Env::new("overrides-created-file");
         env.set_target(SURFACE, false);

@@ -240,11 +240,16 @@ pub fn render_install(dest: &Path) -> Result<String, String> {
 }
 
 /// The installed file with the two values put back as `backup` had them (and the ones it lacked
-/// taken out again), and the overrides as [`restore_overrides`] puts them back; everything else
+/// taken out again), and the overrides `leaves` says the write changed undone as
+/// [`restore_overrides`] does (none without `leaves`); everything else
 /// stays as it is now. An `attribution` object the apply created goes with them. An installed
 /// file or a backup that no longer reads as strict JSON, or whose `attribution` is not an object
 /// where it must be, is an error: nothing is written.
-pub fn render_restored(installed: &Path, backup: &Path) -> Result<String, String> {
+pub fn render_restored(
+    installed: &Path,
+    backup: &Path,
+    leaves: Option<&Leaves>,
+) -> Result<String, String> {
     let mut current = read(installed)
         .map_err(|refusal| {
             format!(
@@ -291,7 +296,9 @@ pub fn render_restored(installed: &Path, backup: &Path) -> Result<String, String
             }
         }
     }
-    restore_overrides(&mut current, &previous)?;
+    if let Some(leaves) = leaves {
+        restore_overrides(&mut current, leaves)?;
+    }
     render(current)
 }
 
@@ -305,8 +312,10 @@ pub struct Wanted {
 /// The leaves the app owns, as its record holds them: JSON path to the digest of the value.
 pub type Owned = std::collections::BTreeMap<String, String>;
 
-/// What one write changes, per leaf, for the review, the status and the ownership record.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// What one write changes, per leaf, for the review, the status and the ownership record. The
+/// transaction manifest keeps it too, so that an undo touches only what that write did.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct Leaves {
     /// The two attribution values are added.
     pub attribution: bool,
@@ -527,49 +536,43 @@ fn remove_overrides(config: &mut Map<String, Value>, owned: &Owned, leaves: &mut
     }
 }
 
-/// Whether undoing a write would put an override back or take one out: a leaf that is
-/// `"name-only"` on one side and absent on the other. The app writes nothing else there, so any
-/// other difference is the user's and stays.
-fn override_restore_pending(current: &Map<String, Value>, backup: &Map<String, Value>) -> bool {
-    let leaf = |config: &Map<String, Value>, name: &str| {
-        config
-            .get(OVERRIDES)
-            .and_then(Value::as_object)
-            .and_then(|overrides| overrides.get(name))
-            .cloned()
-    };
-    let ours = Some(Value::String(OVERRIDE_VALUE.to_string()));
-    ON_REQUEST_SKILLS.iter().any(|name| {
-        let (now, before) = (leaf(current, name), leaf(backup, name));
-        (now.is_none() && before == ours) || (now == ours && before.is_none())
-    })
+/// The name of an override path (`skillOverrides.retro` is `retro`).
+fn override_name(path: &str) -> Option<&str> {
+    path.strip_prefix(OVERRIDES)?.strip_prefix('.')
 }
 
-/// Whether an undo still has an override to put back or take out of the installed file (see
-/// [`restore_overrides`]). A file either side cannot read has none: the attribution digest
-/// already tells such a file apart.
-pub fn overrides_differ(installed: &Path, backup: &Path) -> bool {
-    match (read(installed), read(backup)) {
-        (Ok(current), Ok(previous)) => {
-            override_restore_pending(&current.unwrap_or_default(), &previous.unwrap_or_default())
-        }
-        _ => false,
+/// Whether undoing the write that changed `leaves` still has something to do in `current`: a leaf
+/// it added that still holds the app's value, or a leaf it removed that is still absent.
+fn override_restore_pending(current: &Map<String, Value>, leaves: &Leaves) -> bool {
+    let overrides = current.get(OVERRIDES).and_then(Value::as_object);
+    let leaf = |path: &String| {
+        override_name(path).and_then(|name| overrides.and_then(|overrides| overrides.get(name)))
+    };
+    let ours = Value::String(OVERRIDE_VALUE.to_string());
+    leaves.added.iter().any(|path| leaf(path) == Some(&ours))
+        || leaves.removed.iter().any(|path| leaf(path).is_none())
+}
+
+/// Whether an undo of the write that changed `leaves` still has an override to put back or take
+/// out of the installed file (see [`restore_overrides`]). A file that cannot be read has none:
+/// the attribution digest already tells such a file apart.
+pub fn overrides_differ(installed: &Path, leaves: &Leaves) -> bool {
+    match read(installed) {
+        Ok(current) => override_restore_pending(&current.unwrap_or_default(), leaves),
+        Err(_) => false,
     }
 }
 
-/// Puts the overrides back as `backup` had them where the file still holds what the write left:
-/// a leaf the write added (`"name-only"` now, absent before) goes, a leaf it removed (absent now,
-/// `"name-only"` before) comes back. Any other value is the user's and stays. An object the
-/// write created goes when nothing is left in it; one it removed comes back.
-fn restore_overrides(
-    current: &mut Map<String, Value>,
-    previous: &Map<String, Value>,
-) -> Result<(), String> {
-    if !override_restore_pending(current, previous) {
+/// Undoes what the write that changed `leaves` did to the overrides, where the file still holds
+/// what it left: a leaf it added goes while it is still `"name-only"`, a leaf it removed comes
+/// back while it is still absent. Nothing else is touched, so a value the user added, changed or
+/// deleted since stays as they left it. An object the write created goes when nothing is left
+/// in it; one it removed comes back with its leaves.
+fn restore_overrides(current: &mut Map<String, Value>, leaves: &Leaves) -> Result<(), String> {
+    if !override_restore_pending(current, leaves) {
         return Ok(());
     }
     let ours = Value::String(OVERRIDE_VALUE.to_string());
-    let before = previous.get(OVERRIDES).and_then(Value::as_object);
     if !current.contains_key(OVERRIDES) {
         current.insert(OVERRIDES.to_string(), Value::Object(Map::new()));
     }
@@ -579,19 +582,17 @@ fn restore_overrides(
                 .to_string(),
         );
     };
-    for name in ON_REQUEST_SKILLS {
-        let had = before.and_then(|before| before.get(name));
-        match (overrides.get(name), had) {
-            (Some(now), None) if *now == ours => {
-                overrides.shift_remove(name);
-            }
-            (None, Some(had)) if *had == ours => {
-                overrides.insert(name.to_string(), ours.clone());
-            }
-            _ => {}
+    for name in leaves.added.iter().filter_map(|path| override_name(path)) {
+        if overrides.get(name) == Some(&ours) {
+            overrides.shift_remove(name);
         }
     }
-    if before.is_none() && overrides.is_empty() {
+    for name in leaves.removed.iter().filter_map(|path| override_name(path)) {
+        if !overrides.contains_key(name) {
+            overrides.insert(name.to_string(), ours.clone());
+        }
+    }
+    if leaves.created_object && overrides.is_empty() {
         current.shift_remove(OVERRIDES);
     }
     Ok(())
@@ -830,7 +831,7 @@ mod tests {
         let backup = dir.join("backup.json");
         fs::write(&backup, USER_FILE).unwrap();
         fs::write(&dest, render_install(&backup).unwrap()).unwrap();
-        let restored = render_restored(&dest, &backup).expect("restored");
+        let restored = render_restored(&dest, &backup, None).expect("restored");
         assert_eq!(object(&restored), object(USER_FILE));
         assert_eq!(
             object(&restored).keys().collect::<Vec<_>>(),
@@ -850,7 +851,7 @@ mod tests {
         )
         .unwrap();
         fs::write(&dest, render_install(&backup).unwrap()).unwrap();
-        let restored = render_restored(&dest, &backup).expect("restored");
+        let restored = render_restored(&dest, &backup, None).expect("restored");
         assert_eq!(
             serde_json::to_string(&object(&restored)).unwrap(),
             r#"{"attribution":{"sessionUrl":true},"model":"x"}"#
@@ -858,7 +859,7 @@ mod tests {
         // An empty object the user had stays an empty object.
         fs::write(&backup, r#"{"attribution":{}}"#).unwrap();
         fs::write(&dest, render_install(&backup).unwrap()).unwrap();
-        let restored = render_restored(&dest, &backup).expect("restored");
+        let restored = render_restored(&dest, &backup, None).expect("restored");
         assert_eq!(
             serde_json::to_string(&object(&restored)).unwrap(),
             r#"{"attribution":{}}"#
@@ -882,7 +883,7 @@ mod tests {
             serde_json::to_string_pretty(&Value::Object(later)).unwrap(),
         )
         .unwrap();
-        let restored = object(&render_restored(&dest, &backup).expect("restored"));
+        let restored = object(&render_restored(&dest, &backup, None).expect("restored"));
         assert_eq!(restored.get("model"), Some(&Value::String("sonnet".into())));
         assert_eq!(
             restored.get("attribution"),
@@ -899,14 +900,14 @@ mod tests {
         let backup = dir.join("backup.json");
         fs::write(&backup, USER_FILE).unwrap();
         fs::write(&dest, "{\n  // SECRET-MARKER\n}\n").unwrap();
-        let error = render_restored(&dest, &backup).expect_err("refused");
+        let error = render_restored(&dest, &backup, None).expect_err("refused");
         assert!(!error.contains("SECRET-MARKER"), "{error}");
         fs::write(&dest, r#"{"attribution":"SECRET-MARKER"}"#).unwrap();
-        let error = render_restored(&dest, &backup).expect_err("refused");
+        let error = render_restored(&dest, &backup, None).expect_err("refused");
         assert!(!error.contains("SECRET-MARKER"), "{error}");
         fs::write(&dest, "{}").unwrap();
         fs::write(&backup, "[\"SECRET-MARKER\"]").unwrap();
-        let error = render_restored(&dest, &backup).expect_err("refused");
+        let error = render_restored(&dest, &backup, None).expect_err("refused");
         assert!(!error.contains("SECRET-MARKER"), "{error}");
         let _ = fs::remove_dir_all(dir);
     }

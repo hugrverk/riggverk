@@ -152,6 +152,11 @@ pub struct ArtifactManifestOperation {
     /// manifests and where the output is not known in advance (see [`expected_apply_full_digest`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_full_digest: Option<String>,
+    /// Claude's `settings.json` only: the overrides this write added and removed, so that an undo
+    /// takes out or puts back those and nothing else. Absent in older manifests and for every
+    /// other artifact; an undo then leaves the overrides as they are.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings_leaves: Option<crate::claude_settings::Leaves>,
 }
 
 impl Default for ArtifactManifestOperation {
@@ -169,6 +174,7 @@ impl Default for ArtifactManifestOperation {
             post_apply_digest: None,
             post_apply_full_digest: None,
             expected_full_digest: None,
+            settings_leaves: None,
         }
     }
 }
@@ -3754,7 +3760,9 @@ pub fn artifact_matches_previous_backup_state(
             // the write added or removed is compared on its own.
             Ok(backup_managed == current_managed
                 && !(op.artifact == ArtifactId::ClaudeSettings
-                    && crate::claude_settings::overrides_differ(&dest, &backup_path)))
+                    && op.settings_leaves.as_ref().is_some_and(|leaves| {
+                        crate::claude_settings::overrides_differ(&dest, leaves)
+                    })))
         }
         RollbackAction::NoAction => Ok(true),
     }
@@ -4522,8 +4530,11 @@ fn restore_artifact_from_backup_with_mode(
                     } else if op.artifact == ArtifactId::ClaudeSettings {
                         // Put the two values back as the backup had them; the rest of the file
                         // is whatever it is now.
-                        let rendered =
-                            crate::claude_settings::render_restored(&dest, &backup_path)?;
+                        let rendered = crate::claude_settings::render_restored(
+                            &dest,
+                            &backup_path,
+                            op.settings_leaves.as_ref(),
+                        )?;
                         crate::safe_filesystem::write_regular_file_atomic(
                             &dest,
                             rendered.as_bytes(),
