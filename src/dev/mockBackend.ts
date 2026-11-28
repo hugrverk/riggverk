@@ -2240,6 +2240,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
         removable: [{ label: "claude rules", path: "~/.claude/CLAUDE.md" }, { label: "codex agents", path: "~/.codex/agents" }],
         preserved: [{ label: "cursor mcp", path: "~/.cursor/mcp.json" }],
         merged: [{ label: "opencode config", path: "~/.config/opencode/opencode.json" }],
+        edited: [],
         summary: "2 removable, 1 preserved, 1 merged",
         plan_fingerprint: uninstallPreview?.fingerprint ?? null,
         preview_token: uninstallPreview?.token ?? null,

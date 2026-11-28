@@ -16,9 +16,10 @@ interface UninstallCardProps {
 
 /**
  * Workspace lifecycle exit: previews exactly which installed files are
- * app-owned (removable), which user-modified copies are preserved, and which
- * merged configs stay, then applies the removal as a rollback-capable
- * transaction after explicit confirmation.
+ * app-owned (removable), which user-modified copies are preserved, which
+ * merged configs stay, and which files of the user's lose the values the app
+ * wrote, then applies it as a rollback-capable transaction after explicit
+ * confirmation.
  */
 export function UninstallCard({
   dataFolderOk,
@@ -114,6 +115,16 @@ export function UninstallCard({
                   </ul>
                 </details>
               )}
+              {plan.edited.length > 0 && (
+                <details className="uninstall-detail">
+                  <summary>{plural(plan.edited.length, "file")} Riggverk's values are taken out of</summary>
+                  <ul className="uninstall-list">
+                    {plan.edited.map((item) => (
+                      <li key={item.path}><code>{item.path}</code></li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               {plan.merged.length > 0 && (
                 <details className="uninstall-detail">
                   <summary>{plural(plan.merged.length, "merged config")} left in place</summary>
@@ -134,7 +145,7 @@ export function UninstallCard({
           <button
             type="button"
             className="btn btn-sm btn-danger"
-            disabled={!plan?.plan_fingerprint || plan.removable.length === 0}
+            disabled={!plan?.plan_fingerprint || plan.removable.length + plan.edited.length === 0}
             onClick={confirm}
           >
             uninstall everything

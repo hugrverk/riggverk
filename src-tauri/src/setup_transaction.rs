@@ -2140,6 +2140,16 @@ pub struct UninstallArtifactPlan {
     pub preserved: Vec<ArtifactId>,
     /// Merge-managed config files (user-owned by contract); never deleted.
     pub merged: Vec<ArtifactId>,
+    /// Merge-managed files the uninstall edits: the values the app owns per leaf are taken out of
+    /// them (Claude's skill overrides), everything else stays.
+    pub edits: Vec<PlannedArtifact>,
+}
+
+impl UninstallArtifactPlan {
+    /// Every operation the uninstall applies, removals first.
+    pub fn operations(&self) -> Vec<PlannedArtifact> {
+        self.removals.iter().chain(&self.edits).cloned().collect()
+    }
 }
 
 /// Plan a full uninstall across all surfaces: every installed artifact whose
@@ -2163,6 +2173,7 @@ pub fn plan_artifacts_for_uninstall(
     let mut removals = Vec::new();
     let mut preserved = Vec::new();
     let mut merged = Vec::new();
+    let mut edits = Vec::new();
     let mut seen = std::collections::HashSet::new();
     // Two skill roots can be one folder (an environment variable names another root); the file is
     // removed once.
@@ -2190,6 +2201,35 @@ pub fn plan_artifacts_for_uninstall(
                 .resolve_dest(home, workspace_root)
                 .map(|dest| dest.is_file())
                 .unwrap_or(false);
+            if exists && artifact == ArtifactId::ClaudeSettings {
+                // The overrides the app wrote go, whatever the targets say; the attribution
+                // values stay.
+                let identity = crate::managed_state::artifact_identity(&artifact);
+                let plan = claude_settings_mcp_plan(claude_settings_plan_with(
+                    workspace_root,
+                    home,
+                    sources.bundle(),
+                    records.iter().find(|record| record.identity == identity),
+                    crate::claude_settings::Wanted::default(),
+                    true,
+                ));
+                if let (OperationKind::Update, Some((rewrite, leaves))) = (plan.kind, plan.settings)
+                {
+                    edits.push(PlannedArtifact {
+                        artifact: artifact.clone(),
+                        surface: artifact.surface(),
+                        kind: plan.kind,
+                        previous_state: plan.previous_state,
+                        rollback_action: rollback_action_for(plan.kind, plan.previous_state),
+                        rules: None,
+                        rules_rewrite: Some(rewrite),
+                        mcp: None,
+                        file: None,
+                        overwrite: None,
+                        settings: Some(leaves),
+                    });
+                }
+            }
             if exists && holds_managed_entry(&artifact, home, workspace_root) {
                 merged.push(artifact);
             }
@@ -2317,6 +2357,7 @@ pub fn plan_artifacts_for_uninstall(
         removals,
         preserved,
         merged,
+        edits,
     })
 }
 

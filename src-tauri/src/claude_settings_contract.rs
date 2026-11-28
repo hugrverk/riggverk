@@ -489,20 +489,57 @@ mod tests {
     }
 
     #[test]
-    fn uninstall_keeps_the_file_with_the_users_keys() {
+    fn uninstall_removes_the_overrides_and_keeps_attribution_and_the_users_keys() {
         let env = Env::new("uninstall");
         env.write_settings(USER_FILE);
+        env.set_target(OVERRIDES_TARGET, true);
         // The rules file is removable, so the uninstall has something to remove.
         env.apply_surfaces(&[SURFACE, "claude_rules"]);
-        let installed = env.read_settings();
+        assert_eq!(overrides_of(&env.read_settings()).len(), 7);
 
         let plan = preview_uninstall().expect("uninstall preview");
         let path = env.settings().display().to_string();
-        assert!(plan.merged.iter().any(|item| item.path == path), "{path}");
+        let shown = serde_json::to_value(&plan).unwrap();
+        assert!(
+            shown["edited"]
+                .as_array()
+                .is_some_and(|items| items.iter().any(|item| item["path"] == path.as_str())),
+            "{shown}"
+        );
         assert!(plan.removable.iter().all(|item| item.path != path));
         let result = apply_uninstall(plan.plan_fingerprint, plan.preview_token).expect("uninstall");
         assert!(result.success, "uninstall: {}", result.message);
-        assert_eq!(env.read_settings(), installed);
+        let after = parse(&env.read_settings());
+        assert_eq!(
+            keys(&after),
+            ["env", "permissions", "hooks", "model", "attribution"],
+            "the overrides go, the object the app created with them"
+        );
+        assert_eq!(after.get("attribution"), Some(&hidden()));
+        for (key, value) in &parse(USER_FILE) {
+            assert_eq!(after.get(key), Some(value), "{key} kept");
+        }
+    }
+
+    #[test]
+    fn uninstall_with_only_the_overrides_to_remove_still_runs() {
+        let env = Env::new("uninstall-only");
+        env.set_target(SURFACE, false);
+        env.set_target(OVERRIDES_TARGET, true);
+        env.write_settings(USER_FILE);
+        env.apply();
+        assert!(env.settings().exists());
+
+        let plan = preview_uninstall().expect("uninstall preview");
+        assert!(plan.plan_fingerprint.is_some(), "the edit alone is work");
+        let result = apply_uninstall(plan.plan_fingerprint, plan.preview_token).expect("uninstall");
+        assert!(result.success, "uninstall: {}", result.message);
+        assert_eq!(parse(&env.read_settings()), parse(USER_FILE));
+        let plan = preview_uninstall().expect("uninstall preview");
+        assert!(
+            plan.plan_fingerprint.is_none(),
+            "nothing of the app's is left"
+        );
     }
 
     #[test]

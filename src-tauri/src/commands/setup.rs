@@ -3443,6 +3443,8 @@ pub struct UninstallPlanView {
     pub removable: Vec<UninstallItem>,
     pub preserved: Vec<UninstallItem>,
     pub merged: Vec<UninstallItem>,
+    /// Files of the user's the uninstall takes the app's values out of.
+    pub edited: Vec<UninstallItem>,
     pub summary: String,
     pub plan_fingerprint: Option<String>,
     pub preview_token: Option<String>,
@@ -3467,7 +3469,12 @@ fn uninstall_fingerprint(
     home: &Path,
     plan: &setup_transaction::UninstallArtifactPlan,
 ) -> Result<String, String> {
-    setup_transaction::compute_plan_fingerprint(ws_root, SetupSurfaceId::ALL, &plan.removals, home)
+    setup_transaction::compute_plan_fingerprint(
+        ws_root,
+        SetupSurfaceId::ALL,
+        &plan.operations(),
+        home,
+    )
 }
 
 /// Read-only preview of a full uninstall: which installed files are proven
@@ -3494,15 +3501,26 @@ pub fn preview_uninstall() -> Result<UninstallPlanView, String> {
         .iter()
         .map(|a| uninstall_item(a, &ws_root, &home))
         .collect();
+    let edited: Vec<UninstallItem> = plan
+        .edits
+        .iter()
+        .map(|p| uninstall_item(&p.artifact, &ws_root, &home))
+        .collect();
 
-    let summary = format!(
+    let mut summary = format!(
         "{} app-owned file(s) will be removed; {} file(s) of yours kept; {} merged config(s) left in place",
         removable.len(),
         preserved.len(),
         merged.len()
     );
+    if !edited.is_empty() {
+        summary.push_str(&format!(
+            "; Riggverk's values are taken out of {} file(s)",
+            edited.len()
+        ));
+    }
 
-    let (plan_fingerprint, preview_token) = if plan.removals.is_empty() {
+    let (plan_fingerprint, preview_token) = if plan.operations().is_empty() {
         (None, None)
     } else {
         let fingerprint = uninstall_fingerprint(&ws_root, &home, &plan)?;
@@ -3519,6 +3537,7 @@ pub fn preview_uninstall() -> Result<UninstallPlanView, String> {
         removable,
         preserved,
         merged,
+        edited,
         summary,
         plan_fingerprint,
         preview_token,
@@ -3537,7 +3556,7 @@ pub fn apply_uninstall(
     let home = user_home()?;
     reconcile_before_preview_check(&ws_root, &home)?;
     let plan = setup_transaction::plan_artifacts_for_uninstall(&ws_root, &home)?;
-    if plan.removals.is_empty() {
+    if plan.operations().is_empty() {
         return Err("nothing to uninstall: no app-owned installed files found".to_string());
     }
 
@@ -3560,7 +3579,7 @@ pub fn apply_uninstall(
     )?;
 
     Ok(apply_planned_artifacts(
-        &plan.removals,
+        &plan.operations(),
         vec![],
         Some(&token),
         &mut ProgressReporter::for_task("apply_uninstall"),

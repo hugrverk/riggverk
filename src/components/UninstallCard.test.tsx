@@ -13,6 +13,7 @@ const PLAN: UninstallPlanView = {
   removable: [{ label: "claude rules", path: "~/.claude/CLAUDE.md" }],
   preserved: [{ label: "cursor mcp", path: "~/.cursor/mcp.json" }],
   merged: [],
+  edited: [],
   summary: "1 removable, 1 preserved",
   plan_fingerprint: "uninstall-fp",
   preview_token: "uninstall-token",
@@ -89,6 +90,23 @@ describe("UninstallCard", () => {
     rerender(<UninstallCard dataFolderOk busy onApply={vi.fn()} previewRequested onPreviewRequestHandled={handled} />);
     await waitFor(() => expect(handled).toHaveBeenCalledTimes(1));
     expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("lists the files it edits and runs with an edit alone", async () => {
+    invokeMock.mockResolvedValue({
+      ...PLAN,
+      removable: [],
+      preserved: [],
+      edited: [{ label: "Claude settings", path: "/home/u/.claude/settings.json" }],
+    } satisfies UninstallPlanView);
+    const { onApply } = renderCard();
+    fireEvent.click(screen.getByRole("button", { name: /preview uninstall/i }));
+    await waitFor(() => expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalled());
+    const dialog = screen.getByRole("dialog", { hidden: true });
+    expect(within(dialog).getByText("1 file Riggverk's values are taken out of")).toBeTruthy();
+    expect(within(dialog).getByText("/home/u/.claude/settings.json")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: /uninstall everything/i, hidden: true }));
+    expect(onApply).toHaveBeenCalledWith("uninstall-fp", "uninstall-token");
   });
 
   it("shows a failing preview in the card", async () => {
