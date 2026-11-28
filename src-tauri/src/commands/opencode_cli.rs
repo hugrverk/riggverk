@@ -131,8 +131,9 @@ fn probe_root() -> std::io::Result<PathBuf> {
 }
 
 /// Runs `f` with this thread's probes in the app data directory of a temp home, as the app makes
-/// them. Takes the env lock: for the tests that pin where a probe runs.
-#[cfg(test)]
+/// them. Takes the env lock: for the tests that pin where a probe runs (they stub the CLI with a
+/// shell script, so they are Unix only).
+#[cfg(all(test, unix))]
 pub(super) fn with_probes_in_app_data<T>(f: impl FnOnce() -> T) -> T {
     let _lock = crate::test_env::guard::lock();
     let _env = crate::test_env::guard::isolate_data_location_env();

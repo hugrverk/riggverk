@@ -33,7 +33,7 @@ When `XDG_CONFIG_HOME` changes, the next install writes to the new folder. The f
 
 ## Runtime health probes
 
-The OpenCode Runtime cell compares files, and it also asks the installed CLI three things that files cannot show. Each probe has a timeout and an output cap, runs from a new owner-only folder in the system temp folder, removed afterwards, with `OPENCODE_DISABLE_PROJECT_CONFIG=1` (OpenCode also looks for project config in every folder above the working directory), so no project config is picked up, and keeps only an exit status, a version number or, on 2.x, whether the default agent's id is listed. Raw CLI output is never stored or logged.
+The OpenCode Runtime cell compares files, and it also asks the installed CLI three things that files cannot show. Each probe has a timeout and an output cap, runs from a new owner-only folder in Riggverk's app data folder, removed afterwards, with `OPENCODE_DISABLE_PROJECT_CONFIG=1` (OpenCode also looks for project config in every folder above the working directory), so no project config is picked up, and keeps only an exit status, a version number or, on 2.x, whether the default agent's id is listed. Raw CLI output is never stored or logged.
 
 | Probe | Result |
 |-------|--------|
