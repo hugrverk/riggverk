@@ -660,6 +660,44 @@ pub fn set_answer_style(level: crate::answer_style::AnswerStyle) -> Result<(), S
     crate::answer_style::set(&ws_root, level)
 }
 
+// ── Decision style ──
+
+/// The decision style for the Library: the level, or why `decision-style.json` cannot be used.
+#[derive(Debug, Serialize)]
+pub struct DecisionStyleChoice {
+    /// `None` while the file cannot be used.
+    pub(crate) level: Option<crate::decision_style::DecisionStyle>,
+    /// Why `decision-style.json` cannot be used; set, no level can be chosen.
+    pub(crate) problem: Option<String>,
+}
+
+/// How agents put the user's decisions, for every harness. Read-only.
+#[tauri::command(async)]
+pub fn get_decision_style() -> Result<DecisionStyleChoice, String> {
+    let ws_root = setup_workspace_target_path()?;
+    Ok(match crate::decision_style::load(&ws_root) {
+        Ok(level) => DecisionStyleChoice {
+            level: Some(level),
+            problem: None,
+        },
+        Err(problem) => DecisionStyleChoice {
+            level: None,
+            problem: Some(problem),
+        },
+    })
+}
+
+/// Chooses how agents put the user's decisions, for every harness. Writes only
+/// `decision-style.json`; the next Update changes the rules block, with a diff and undo.
+#[tauri::command(async)]
+pub fn set_decision_style(level: crate::decision_style::DecisionStyle) -> Result<(), String> {
+    // Changes what an apply plans: wait for a running mutation instead of interleaving with it.
+    let _mutation = crate::mutation_lock::acquire()?;
+    let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
+    let ws_root = workspace_target_for_write()?;
+    crate::decision_style::set(&ws_root, level)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

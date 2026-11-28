@@ -411,11 +411,11 @@ pub fn read_doc(id: String) -> Result<DocumentContent, String> {
 const CURSOR_USER_RULES_DOC: &str = "templates/cursor/user-rules.md";
 
 /// `doc`, a bundled rules text, composed with the data folder's disabled skills, packs' routing,
-/// comment policy and answer style as Install does (see `pack_routing::compose`). Without a usable
-/// data folder, packs, disabled skills, a comment policy or an answer style it is returned as it is.
-/// A `disabled-skills.json`, `comment-policy.json` or `answer-style.json` that cannot be read is an
-/// error with its fixed phrase, as for the rules Install writes: the text would route to skills the
-/// user turned off or leave out the comment policy or answer style they chose, and the Cursor User
+/// comment policy, answer style and decision style as Install does (see `pack_routing::compose`).
+/// Without a usable data folder, packs, disabled skills or any of those choices it is returned as it
+/// is. A `disabled-skills.json`, `comment-policy.json`, `answer-style.json` or `decision-style.json`
+/// that cannot be read is an error with its fixed phrase, as for the rules Install writes: the text
+/// would route to skills the user turned off or leave out a choice they made, and the Cursor User
 /// Rules are copied by hand from it.
 fn with_pack_routing(
     mut doc: DocumentContent,
@@ -428,12 +428,14 @@ fn with_pack_routing(
         let disabled = sources.disabled().map_err(str::to_string)?;
         let comments = sources.comment_policy().map_err(str::to_string)?;
         let answers = sources.answer_style().map_err(str::to_string)?;
+        let decisions = sources.decision_style().map_err(str::to_string)?;
         doc.content = crate::pack_routing::compose(
             &doc.content,
             disabled,
             sources.pack_routing(),
             comments,
             answers,
+            decisions,
         );
     }
     Ok(doc)

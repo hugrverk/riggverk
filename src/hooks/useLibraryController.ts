@@ -27,6 +27,8 @@ import type {
   CommentPolicyLevel,
   AnswerStyleChoice,
   AnswerStyleLevel,
+  DecisionStyleChoice,
+  DecisionStyleLevel,
   SkillSummary,
 } from "../types";
 
@@ -69,6 +71,10 @@ export function useLibraryController({
   const [answerStyle, setAnswerStyleState] = useState<AnswerStyleChoice | null>(null);
   /** The latest answer style read: an earlier one that answers later never overwrites it. */
   const answerStyleLoadSeqRef = useRef(0);
+  /** How agents put the user's decisions; null while it could not be read. */
+  const [decisionStyle, setDecisionStyleState] = useState<DecisionStyleChoice | null>(null);
+  /** The latest decision style read: an earlier one that answers later never overwrites it. */
+  const decisionStyleLoadSeqRef = useRef(0);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
   const activeSkillIdRef = useRef<string | null>(null);
@@ -496,6 +502,19 @@ export function useLibraryController({
     setAnswerStyleState(choice);
   }, [isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
 
+  /** Reads the decision style. A failure leaves it unread: Rules then shows no choice, and nothing is reported. */
+  const loadDecisionStyle = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
+    const loadSeq = ++decisionStyleLoadSeqRef.current;
+    let choice: DecisionStyleChoice | null = null;
+    try {
+      choice = await invoke<DecisionStyleChoice>("get_decision_style");
+    } catch {
+      choice = null;
+    }
+    if (!isWorkspaceLoadCurrent(generation) || decisionStyleLoadSeqRef.current !== loadSeq) return;
+    setDecisionStyleState(choice);
+  }, [isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
+
   const loadWorkspaceLibraryResources = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     await Promise.all([
       loadSkills(generation).catch(() => {}),
@@ -505,9 +524,10 @@ export function useLibraryController({
       loadRulesFiles(generation),
       loadCommentPolicy(generation),
       loadAnswerStyle(generation),
+      loadDecisionStyle(generation),
     ]);
     setLibraryReloadEpoch(epoch => epoch + 1);
-  }, [loadAgentSources, loadAgentTemplate, loadAnswerStyle, loadCommentPolicy, loadDocs, loadRulesFiles, loadSkills, workspaceLoadGenerationRef]);
+  }, [loadAgentSources, loadAgentTemplate, loadAnswerStyle, loadCommentPolicy, loadDecisionStyle, loadDocs, loadRulesFiles, loadSkills, workspaceLoadGenerationRef]);
 
   const loadLibraryView = useCallback(() => {
     void loadDocs();
@@ -517,7 +537,8 @@ export function useLibraryController({
     void loadRulesFiles();
     void loadCommentPolicy();
     void loadAnswerStyle();
-  }, [loadAgentSources, loadAgentTemplate, loadAnswerStyle, loadCommentPolicy, loadDocs, loadRulesFiles, loadSkills]);
+    void loadDecisionStyle();
+  }, [loadAgentSources, loadAgentTemplate, loadAnswerStyle, loadCommentPolicy, loadDecisionStyle, loadDocs, loadRulesFiles, loadSkills]);
 
   const resetLibraryState = useCallback(() => {
     docSaveOpRef.current.invalidate();
@@ -543,6 +564,8 @@ export function useLibraryController({
     setCommentPolicyState(null);
     answerStyleLoadSeqRef.current += 1;
     setAnswerStyleState(null);
+    decisionStyleLoadSeqRef.current += 1;
+    setDecisionStyleState(null);
 
     // A config source load still running belongs to the old workspace.
     configSourceLoadSeqRef.current += 1;
@@ -953,6 +976,25 @@ export function useLibraryController({
     return true;
   }, [loadAgentTemplate, loadAnswerStyle, onPacksChanged, setError]);
 
+  /**
+   * Chooses how agents put the user's decisions, for every harness, then reads the style and the base template (which
+   * carries the section) again. The next Update changes the rules files, with a diff and undo. Resolves true once saved.
+   */
+  const setDecisionStyle = useCallback(async (level: DecisionStyleLevel): Promise<boolean> => {
+    try {
+      await invoke("set_decision_style", { level });
+    } catch (e) {
+      setError(`Decisions: ${e}`);
+      // The refusal may be a file that became unusable: read it again, so the Library says why and offers no level.
+      await loadDecisionStyle();
+      return false;
+    }
+    // What the next Update writes changed: the overview plans it again.
+    onPacksChanged?.();
+    await Promise.all([loadDecisionStyle(), loadAgentTemplate()]);
+    return true;
+  }, [loadAgentTemplate, loadDecisionStyle, onPacksChanged, setError]);
+
   const readSkill = useCallback(async (id: string) => {
     if (id !== activeSkillIdRef.current && !(await confirmLeave())) return;
     activeSkillIdRef.current = id;
@@ -1166,6 +1208,9 @@ export function useLibraryController({
     answerStyle,
     setAnswerStyle,
     loadAnswerStyle,
+    decisionStyle,
+    setDecisionStyle,
+    loadDecisionStyle,
     activeSkillId,
     activeSkillContent,
     readSkill,

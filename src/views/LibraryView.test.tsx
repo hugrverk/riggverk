@@ -8,6 +8,7 @@ import type {
   AgentTargetMeta,
   AnswerStyleChoice,
   CommentPolicyChoice,
+  DecisionStyleChoice,
   DocumentContent,
   InstallAgent,
   PackLibrary,
@@ -57,6 +58,9 @@ interface Fixture {
   answerStyle: AnswerStyleChoice;
   /** When set, set_answer_style refuses with this reason, and the file reads as unusable from then on. */
   refuseAnswerStyle: string | null;
+  decisionStyle: DecisionStyleChoice;
+  /** When set, set_decision_style refuses with this reason, and the file reads as unusable from then on. */
+  refuseDecisionStyle: string | null;
 }
 
 function skill(id: string, description: string, extra: Partial<SkillSummary> = {}): SkillSummary {
@@ -133,6 +137,8 @@ function freshFixture(): Fixture {
     refuseCommentPolicy: null,
     answerStyle: { level: "harness_default", problem: null },
     refuseAnswerStyle: null,
+    decisionStyle: { level: "harness_default", problem: null },
+    refuseDecisionStyle: null,
   };
 }
 
@@ -233,6 +239,15 @@ function installBackend() {
           return Promise.reject(fixture.refuseAnswerStyle);
         }
         fixture.answerStyle = { level: args!.level as AnswerStyleChoice["level"], problem: null };
+        return Promise.resolve(null);
+      case "get_decision_style":
+        return Promise.resolve(fixture.decisionStyle);
+      case "set_decision_style":
+        if (fixture.refuseDecisionStyle) {
+          fixture.decisionStyle = { level: null, problem: fixture.refuseDecisionStyle };
+          return Promise.reject(fixture.refuseDecisionStyle);
+        }
+        fixture.decisionStyle = { level: args!.level as DecisionStyleChoice["level"], problem: null };
         return Promise.resolve(null);
       case "forget_pack":
         fixture.packs = { ...fixture.packs, packs: fixture.packs.packs.filter(pack => pack.name !== args!.name) };
@@ -347,6 +362,8 @@ function Harness({ showConfigs = true, onOpenHarnessView, withoutCopy = false, t
       onSetCommentPolicy={lib.setCommentPolicy}
       answerStyle={lib.answerStyle}
       onSetAnswerStyle={lib.setAnswerStyle}
+      decisionStyle={lib.decisionStyle}
+      onSetDecisionStyle={lib.setDecisionStyle}
       agentSources={lib.agentSources}
       activeAgentContent={lib.activeAgentContent}
       onSelectAgent={lib.selectAgent}
@@ -1319,6 +1336,81 @@ describe("Library answer style", () => {
     const results = await screen.findByRole("region", { name: "Search results" });
     expect(within(results).getByText("Plain")).toBeTruthy();
     expect(within(results).queryByText("Minimal")).toBeNull();
+  });
+});
+
+describe("Library decisions", () => {
+  function decisionsGroup() {
+    return within(screen.getByRole("heading", { name: "Decisions" }).closest("section")!);
+  }
+
+  /** A row of the decisions group: "Harness default" names a row of the other groups too. */
+  function decisionRow(name: string): HTMLElement {
+    const row = decisionsGroup().getAllByRole("listitem").find(item => item.querySelector("b")?.textContent === name);
+    if (!row) throw new Error(`no decisions row named ${name}`);
+    return row;
+  }
+
+  it("lists the two levels under Rules, right under Answer style, with the one in use marked", async () => {
+    await renderLibrary();
+    await screen.findByRole("heading", { name: "Decisions" });
+    const headings = screen.getAllByRole("heading").map(heading => heading.textContent);
+    expect(headings.indexOf("Decisions")).toBe(headings.indexOf("Answer style") + 1);
+    const group = decisionsGroup();
+    expect(group.getByText("for every harness · the next Update changes the rules")).toBeTruthy();
+    for (const name of ["Harness default", "As questions"]) expect(group.getByText(name)).toBeTruthy();
+    expect(within(decisionRow("Harness default")).getByText("In use")).toBeTruthy();
+    expect(within(decisionRow("Harness default")).getByText("Adds nothing: each agent asks the way it does by default.")).toBeTruthy();
+    expect(within(decisionRow("Harness default")).queryByRole("button", { name: "Use" })).toBeNull();
+    expect(within(decisionRow("As questions")).getByText("Your decisions come as questions, recommended answer first, in the agent's question tool when it has one.")).toBeTruthy();
+    expect(within(decisionRow("As questions")).getByRole("button", { name: "Use" })).toBeTruthy();
+  });
+
+  it("Use sets the level for every harness, reads it back and shows the composed base again", async () => {
+    await renderLibrary();
+    await screen.findByRole("heading", { name: "Decisions" });
+    const templateReads = callsTo("read_agent_template").length;
+    fireEvent.click(within(decisionRow("As questions")).getByRole("button", { name: "Use" }));
+    await waitFor(() => expect(callsTo("set_decision_style")).toEqual([{ level: "as_questions" }]));
+    await waitFor(() => expect(within(decisionRow("As questions")).getByText("In use")).toBeTruthy());
+    expect(within(decisionRow("Harness default")).getByRole("button", { name: "Use" })).toBeTruthy();
+    expect(callsTo("get_decision_style").length).toBeGreaterThanOrEqual(2);
+    expect(callsTo("read_agent_template").length).toBeGreaterThan(templateReads);
+    expect(callsTo("set_answer_style")).toEqual([]);
+    expect(callsTo("set_comment_policy")).toEqual([]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("refuses a level and says why while decision-style.json cannot be read", async () => {
+    fixture.decisionStyle = { level: null, problem: "decision-style.json cannot be read; fix or remove it" };
+    await renderLibrary();
+    const problem = await screen.findByRole("group", { name: "Decisions problem" });
+    expect(problem.textContent).toContain("unavailable: decision-style.json cannot be read; fix or remove it");
+    expect(decisionsGroup().queryByRole("button", { name: "Use" })).toBeNull();
+    expect(decisionsGroup().queryByText("In use")).toBeNull();
+    // The answer style is a separate file and still offers its levels.
+    const answers = within(screen.getByRole("heading", { name: "Answer style" }).closest("section")!);
+    expect(answers.getByRole("button", { name: "Use" })).toBeTruthy();
+  });
+
+  it("after a refused Use, reads the style again: the problem shows and no level is offered", async () => {
+    await renderLibrary();
+    await screen.findByRole("heading", { name: "Decisions" });
+    fixture.refuseDecisionStyle = "decision-style.json cannot be read; fix or remove it";
+    fireEvent.click(within(decisionRow("As questions")).getByRole("button", { name: "Use" }));
+    const problem = await screen.findByRole("group", { name: "Decisions problem" });
+    expect(problem.textContent).toContain("unavailable: decision-style.json cannot be read; fix or remove it");
+    expect(decisionsGroup().queryByRole("button", { name: "Use" })).toBeNull();
+    expect(decisionsGroup().queryByText("In use")).toBeNull();
+  });
+
+  it("finds the levels by search", async () => {
+    await renderLibrary();
+    await screen.findByRole("heading", { name: "Decisions" });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search all topics" }), { target: { value: "decisions" } });
+    const results = await screen.findByRole("region", { name: "Search results" });
+    expect(within(results).getByText("As questions")).toBeTruthy();
+    expect(within(results).queryByText("Plain")).toBeNull();
   });
 });
 

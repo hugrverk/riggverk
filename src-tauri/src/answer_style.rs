@@ -27,7 +27,6 @@ pub const FOREIGN: &str =
     "answer-style.json was written by another version of Riggverk; update the app or move the file away";
 
 /// Heading of the section `plain` adds to the rules block.
-#[cfg(test)]
 pub const SECTION_HEADING: &str = "## Answer style";
 
 /// The section of `plain`.

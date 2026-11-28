@@ -67,8 +67,9 @@ pub use opencode_runtime::{
 };
 pub use packs::{copy_skill_to_pack, forget_pack, list_pack_skills, save_pack_skill};
 pub use rules::{
-    apply_rules_conversion, get_answer_style, get_comment_policy, preview_rules_conversion,
-    preview_rules_diff, set_answer_style, set_comment_policy, set_rules_user_managed,
+    apply_rules_conversion, get_answer_style, get_comment_policy, get_decision_style,
+    preview_rules_conversion, preview_rules_diff, set_answer_style, set_comment_policy,
+    set_decision_style, set_rules_user_managed,
 };
 pub use rules_refinements::{
     list_rules_files, open_rules_file, read_rules_file, save_rules_refinements,

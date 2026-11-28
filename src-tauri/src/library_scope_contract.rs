@@ -22,12 +22,13 @@ mod tests {
     /// The others are install, conflict, rules-conversion, settings and workspace-reset
     /// actions that never take Library text. `forget_pack` edits `pack-skills.json` only,
     /// `set_skills_enabled` `disabled-skills.json` only, `set_comment_policy` `comment-policy.json`
-    /// only, `set_answer_style` `answer-style.json` only.
+    /// only, `set_answer_style` `answer-style.json` only, `set_decision_style` `decision-style.json`
+    /// only.
     /// `copy_skill_to_pack` and `save_pack_skill` write only inside `<data>/packs/personal/`;
     /// `commit_skill_import`, `remove_imported_skill` and `undo_last_import` only inside
     /// `<data>/packs/imported/` and the backups. `preview_skill_import` reads the source and writes
     /// only its private staging copy in the state folder.
-    const WRITE_COMMANDS: [&str; 26] = [
+    const WRITE_COMMANDS: [&str; 27] = [
         "save_doc",
         "create_doc",
         "save_rules_refinements",
@@ -45,6 +46,7 @@ mod tests {
         "set_skills_enabled",
         "set_comment_policy",
         "set_answer_style",
+        "set_decision_style",
         "commit_skill_import",
         "remove_imported_skill",
         "set_imported_skill_routing",

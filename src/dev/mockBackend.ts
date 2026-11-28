@@ -92,6 +92,8 @@ import type {
   CommentPolicyLevel,
   AnswerStyleChoice,
   AnswerStyleLevel,
+  DecisionStyleChoice,
+  DecisionStyleLevel,
   SkillLoadFlag,
   SkillReadFolder,
   SkillSummary,
@@ -1709,11 +1711,22 @@ const ANSWER_SECTIONS: Record<AnswerStyleLevel, string> = {
   plain: "## Answer style\nWrite answers in plain technical language, in the user's language. Lead with the answer. Aim for sentences of about 20 words or fewer, with one idea each. Use active voice in every sentence and list item: make the one who acts the subject (\"I removed the file\", \"the test skips Windows\"), not the thing acted on (\"the file was removed\", \"Windows is skipped\"). Say \"I\" for your own actions. Use the passive only when the actor is unknown. Use one term for one thing. Write prose in full sentences. Write a procedure as numbered steps, one action per step. Put a warning or a condition in its own sentence before the step it affects. Keep lists, tables and code blocks where the content is parallel or meant to be copied; a list item may be a fragment. Keep every fact, number, path and caveat: cut words, not content. About one sentence in five may break the length and one-idea rules when a reason or a trade-off reads better as one longer sentence; the active-voice rule has no such allowance. Leave code, commands, identifiers, quoted output and required report headings unchanged.\n",
 };
 
+/** The decision style chosen in this session (`set_decision_style`). */
+let decisionStyleLevel: DecisionStyleLevel = "harness_default";
+
+/** The section each decision style level adds to the rules, as the backend's `decision_style` writes it. */
+const DECISION_SECTIONS: Record<DecisionStyleLevel, string> = {
+  harness_default: "",
+  as_questions: "## Decisions\nWhen a decision is the user's to make, ask it as a question instead of describing the options in prose. Give two to four answers with your recommended answer first, and one line per answer on what it leads to. Use the harness's question tool when it has one. Ask questions that do not depend on each other together, and carry on with the work that does not depend on the answer. Do not ask about what you can look up or decide by convention.\n",
+};
+
 /** The bundled base as the Library shows it, composed per read like the backend's. */
 function agentTemplate(): DocumentContent {
   const comments = COMMENT_SECTIONS[commentPolicyLevel];
   // The answer style follows the base's Communication section, before the section after it.
   const answers = ANSWER_SECTIONS[answerStyleLevel];
+  // The decisions follow the answer style's section, or Communication when there is none.
+  const decisions = DECISION_SECTIONS[decisionStyleLevel];
   return {
     id: "agent-template",
     title: "Agent Rules",
@@ -1722,6 +1735,7 @@ function agentTemplate(): DocumentContent {
     source: "curated",
     content: "# Global Agent Rules\n\n## Priority\nRepository reality overrides assumptions. Explicit user instructions override these defaults.\n\n## Communication\nBe direct, dense, technical, and concise.\n\n"
       + (answers ? `${answers}\n` : "")
+      + (decisions ? `${decisions}\n` : "")
       + "## Verification\nNever claim done without evidence.\n"
       // Like the backend: the routing of the packs follows the base (here at its end: the mock base has no routing section).
       + (packLibrary.packs.some(pack => pack.routing?.length)
@@ -2299,6 +2313,14 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       const level = arg<AnswerStyleLevel>(args, "level");
       if (!Object.prototype.hasOwnProperty.call(ANSWER_SECTIONS, level)) throw new Error(`unknown answer style: ${String(level)}`);
       answerStyleLevel = level;
+      return null;
+    }
+    case "get_decision_style":
+      return { level: decisionStyleLevel, problem: null } satisfies DecisionStyleChoice;
+    case "set_decision_style": {
+      const level = arg<DecisionStyleLevel>(args, "level");
+      if (!Object.prototype.hasOwnProperty.call(DECISION_SECTIONS, level)) throw new Error(`unknown decision style: ${String(level)}`);
+      decisionStyleLevel = level;
       return null;
     }
     case "set_skills_enabled": {

@@ -12,7 +12,8 @@
 //! differing lines.
 //!
 //! A `## Code comments` section exactly as a comment policy level writes it,
-//! and a `## Answer style` section exactly as an answer style level writes it,
+//! a `## Answer style` section exactly as an answer style level writes it,
+//! and a `## Decisions` section exactly as a decision style level writes it,
 //! are never moved: they are the app's text, and the new block carries the
 //! levels the user has chosen now.
 
@@ -281,8 +282,9 @@ pub fn convert(
     };
     let closest = closest_base(source, bases, &user_text);
     let mut changes = section_changes(&to_lf(&closest.text), &user_text);
-    // A comment policy or answer style section as the app wrote it is the app's text, never the
-    // user's: the new block carries the level chosen now (see `comment_policy`, `answer_style`).
+    // A comment policy, answer style or decision style section as the app wrote it is the app's
+    // text, never the user's: the new block carries the level chosen now (see `comment_policy`,
+    // `answer_style`, `decision_style`).
     // The pack routing section is the app's whatever it holds: it is composed from the packs and
     // the disabled skills, so it differs after any change of those, and the new block carries the
     // routing composed now (see `pack_routing`). So is a base routing section as a shipped base
@@ -294,6 +296,7 @@ pub fn convert(
     changes.changed.retain(|section| {
         !crate::comment_policy::is_app_section(&section.text)
             && !crate::answer_style::is_app_section(&section.text)
+            && !crate::decision_style::is_app_section(&section.text)
             && section.heading.as_deref() != Some(crate::pack_routing::SECTION_HEADING)
             && !shipped.iter().flatten().any(|base| {
                 base.key() == section.key()
@@ -470,6 +473,35 @@ mod tests {
         let installed = format!("{BEGIN_MARKER}\n{edited}{END_MARKER}\n");
         let converted = convert(installed.as_bytes(), BASE_NEW, &[], "CLAUDE.md").unwrap();
         assert_eq!(converted.moved_sections, vec!["## Answer style", "## Mine"]);
+    }
+
+    #[test]
+    fn a_decisions_section_the_app_wrote_is_never_moved() {
+        let questions = crate::decision_style::DecisionStyle::AsQuestions.section();
+        let user = format!("{BASE_NEW}\n{questions}\n## Mine\nExtra.\n");
+        let installed = format!("{BEGIN_MARKER}\n{user}{END_MARKER}\n");
+        // Back to harness default: the source has no such section.
+        for source in [BASE_NEW.to_string(), format!("{BASE_NEW}\n{questions}")] {
+            let converted = convert(installed.as_bytes(), &source, &[], "CLAUDE.md").unwrap();
+            assert_eq!(converted.moved_sections, vec!["## Mine"]);
+            let suffix = converted.result.split(END_MARKER).nth(1).unwrap();
+            assert!(!suffix.contains("## Decisions"), "{suffix}");
+        }
+        // With an answer style and a comment policy section beside it, no app section moves.
+        let plain = crate::answer_style::AnswerStyle::Plain.section();
+        let off = crate::comment_policy::CommentPolicy::Off.section();
+        let minimal = crate::comment_policy::CommentPolicy::Minimal.section();
+        let all = format!("{BASE_NEW}\n{plain}\n{questions}\n{minimal}\n## Mine\nExtra.\n");
+        let installed_all = format!("{BEGIN_MARKER}\n{all}{END_MARKER}\n");
+        let source = format!("{BASE_NEW}\n{off}");
+        let converted = convert(installed_all.as_bytes(), &source, &[], "CLAUDE.md").unwrap();
+        assert_eq!(converted.moved_sections, vec!["## Mine"]);
+        // One the user edited is theirs, and moves like any other.
+        let edited = user.replacen(questions, &questions.replacen('\n', "\nMine. ", 1), 1);
+        assert_ne!(edited, user);
+        let installed = format!("{BEGIN_MARKER}\n{edited}{END_MARKER}\n");
+        let converted = convert(installed.as_bytes(), BASE_NEW, &[], "CLAUDE.md").unwrap();
+        assert_eq!(converted.moved_sections, vec!["## Decisions", "## Mine"]);
     }
 
     #[test]
